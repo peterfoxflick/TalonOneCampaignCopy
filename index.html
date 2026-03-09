@@ -1,0 +1,1778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Talon.One Campaign Copier</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --surface-2: #f2f1ee;
+  --border: #e5e3de;
+  --border-strong: #ccc9c2;
+  --text: #1c1b18;
+  --text-2: #6b6860;
+  --text-3: #a09d98;
+  --accent: #2563eb;
+  --accent-light: #eff4ff;
+  --accent-border: #bfcffd;
+  --green: #16a34a;
+  --green-bg: #f0fdf4;
+  --green-border: #bbf7d0;
+  --red: #dc2626;
+  --red-bg: #fef2f2;
+  --red-border: #fecaca;
+  --amber: #d97706;
+  --amber-bg: #fffbeb;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 6px rgba(0,0,0,0.05), 0 12px 40px rgba(0,0,0,0.10);
+}
+
+html { height: 100%; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ── */
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 40px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.header-logo {
+  font-family: 'Lora', serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+
+.header-logo span { color: var(--accent); }
+
+.header-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+
+.header-subtitle {
+  font-size: 13px;
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+/* ── Layout ── */
+.layout {
+  flex: 1;
+  display: flex;
+  max-width: 780px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 48px 24px 80px;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Progress stepper ── */
+.stepper {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin-bottom: 44px;
+  position: relative;
+}
+
+.step-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  gap: 8px;
+}
+
+.step-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: calc(50% + 16px);
+  right: calc(-50% + 16px);
+  height: 2px;
+  background: var(--border);
+  transition: background 0.4s;
+}
+
+.step-item.done:not(:last-child)::after { background: var(--accent); }
+
+.step-circle {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  transition: all 0.3s;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.step-item.active .step-circle {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 4px var(--accent-light);
+}
+
+.step-item.done .step-circle {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.step-label {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  transition: color 0.3s;
+}
+
+.step-item.active .step-label { color: var(--accent); font-weight: 600; }
+.step-item.done .step-label { color: var(--text-2); }
+
+/* ── Card ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card-head {
+  padding: 28px 32px 0;
+}
+
+.step-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-light);
+  color: var(--accent);
+  border-radius: 20px;
+  padding: 4px 12px 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin-bottom: 14px;
+}
+
+.step-tag-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.card-title {
+  font-family: 'Lora', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+  line-height: 1.25;
+}
+
+.card-hint {
+  font-size: 14px;
+  color: var(--text-2);
+  margin-bottom: 28px;
+  line-height: 1.55;
+  font-weight: 400;
+}
+
+.card-body {
+  padding: 0 32px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Summary strip (appears above card after steps complete) ── */
+.summary-strip {
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin-bottom: 12px;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-strip.visible { display: flex; }
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.summary-row strong { color: var(--text); font-weight: 600; }
+.summary-check { color: var(--green); font-size: 12px; }
+.summary-edit {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-light);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.summary-edit:hover { background: var(--accent); color: #fff; }
+
+/* ── Form elements ── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+input[type=text], input[type=email], input[type=password], select {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+input:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+input::placeholder { color: var(--text-3); }
+input:disabled { background: var(--surface-2); color: var(--text-3); cursor: not-allowed; }
+
+.input-with-btn {
+  display: flex;
+  gap: 8px;
+}
+
+.input-with-btn input { flex: 1; }
+
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6860' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+select option { background: #fff; }
+
+/* ── Buttons ── */
+.btn {
+  padding: 11px 22px;
+  border-radius: var(--radius-sm);
+  border: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+}
+
+.btn-primary:hover { background: #1d4ed8; box-shadow: 0 4px 16px rgba(37,99,235,0.3); }
+.btn-primary:disabled { background: var(--border-strong); color: var(--text-3); box-shadow: none; cursor: not-allowed; }
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--text-2);
+  border: 1.5px solid var(--border);
+}
+
+.btn-secondary:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface-2); }
+
+.btn-danger {
+  background: var(--red-bg);
+  color: var(--red);
+  border: 1.5px solid var(--red-border);
+}
+
+.btn-danger:hover { background: #fee2e2; }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-lg {
+  padding: 14px 28px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+
+/* ── Nav footer ── */
+.card-nav {
+  padding: 20px 32px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ── Session badge ── */
+.session-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--green-bg);
+  border: 1px solid var(--green-border);
+  color: var(--green);
+  border-radius: 8px;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.session-badge-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+  animation: pulse-dot 1.8s ease infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.session-badge .disconnect-link {
+  margin-left: 4px;
+  color: var(--red);
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  border-left: 1px solid var(--green-border);
+  padding-left: 10px;
+}
+
+.session-badge .disconnect-link:hover { text-decoration: underline; }
+
+/* ── App list ── */
+.app-search-input {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px 10px 38px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a09d98' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 12px center;
+}
+
+.app-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+.app-search-input::placeholder { color: var(--text-3); }
+
+.app-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.app-list::-webkit-scrollbar { width: 4px; }
+.app-list::-webkit-scrollbar-track { background: transparent; }
+.app-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.app-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.18s;
+  background: var(--surface);
+}
+
+.app-item:hover { border-color: var(--accent-border); background: var(--accent-light); }
+.app-item.selected { border-color: var(--accent); background: var(--accent-light); }
+
+.app-icon {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.app-item.selected .app-icon { background: #dbeafe; border-color: var(--accent-border); }
+
+.app-info { flex: 1; min-width: 0; }
+.app-name { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-meta { font-size: 12px; color: var(--text-3); margin-top: 1px; }
+
+.app-check {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+  font-size: 10px;
+  color: #fff;
+}
+
+.app-item.selected .app-check { background: var(--accent); border-color: var(--accent); }
+.app-item.selected .app-check::after { content: '✓'; }
+
+.app-empty { font-size: 13px; color: var(--text-3); text-align: center; padding: 24px 0; }
+
+/* ── Mode cards ── */
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.mode-card {
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--surface);
+}
+
+.mode-card:hover { border-color: var(--accent-border); background: var(--accent-light); }
+.mode-card.selected { border-color: var(--accent); background: var(--accent-light); }
+
+.mode-icon { font-size: 26px; margin-bottom: 10px; }
+.mode-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.mode-card.selected .mode-title { color: var(--accent); }
+.mode-desc { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+
+/* ── Loyalty mapping ── */
+.loyalty-map-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lm-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 0;
+  flex: 1;
+}
+
+.lm-sublabel { font-size: 11px; color: var(--text-3); font-weight: 400; margin-top: 1px; }
+
+.lm-arrow {
+  font-size: 16px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.lm-select-wrap { flex: 1; }
+.lm-select-wrap select { font-size: 13px; }
+
+.loyalty-empty {
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* ── Review summary ── */
+.review-table {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.review-row {
+  display: flex;
+  align-items: center;
+  padding: 13px 18px;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.review-row:last-child { border-bottom: none; }
+
+.review-icon { font-size: 16px; flex-shrink: 0; width: 24px; text-align: center; }
+.review-key { font-size: 12px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.5px; width: 130px; flex-shrink: 0; }
+.review-val { font-size: 14px; color: var(--text); font-weight: 500; flex: 1; }
+
+/* ── Progress ── */
+.progress-wrap {
+  background: var(--surface-2);
+  border-radius: 8px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 8px;
+  transition: width 0.4s ease;
+}
+
+.progress-label { font-size: 13px; color: var(--text-2); margin-top: 8px; }
+
+/* ── Results ── */
+.result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.result-item.ok { border-color: var(--green-border); background: var(--green-bg); }
+.result-item.fail { border-color: var(--red-border); background: var(--red-bg); }
+.result-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+.result-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.result-detail { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.result-item.ok .result-detail { color: var(--green); }
+.result-item.fail .result-detail { color: var(--red); }
+
+/* ── Log footer ── */
+.log-section {
+  display: none;
+  margin-top: 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.log-section.visible { display: block; }
+
+.log-head {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.log-toggle { font-size: 12px; color: var(--text-3); }
+
+.log-body {
+  padding: 12px 20px;
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #fafaf9;
+}
+
+.log-body::-webkit-scrollbar { width: 4px; }
+.log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.log-entry {
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  display: flex;
+  gap: 10px;
+  line-height: 1.5;
+}
+
+.log-ts { color: var(--text-3); flex-shrink: 0; }
+.log-entry.success .log-msg { color: var(--green); }
+.log-entry.error .log-msg { color: var(--red); }
+.log-entry.info .log-msg { color: #2563eb; }
+.log-entry.warn .log-msg { color: var(--amber); }
+.log-entry.default .log-msg { color: var(--text-2); }
+
+/* ── Inline alert ── */
+.alert {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.alert-error { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
+.alert-success { background: var(--green-bg); border: 1px solid var(--green-border); color: var(--green); }
+.alert-info { background: var(--accent-light); border: 1px solid var(--accent-border); color: var(--accent); }
+.alert-warn { background: var(--amber-bg); border: 1px solid #fde68a; color: var(--amber); }
+.alert-icon { font-size: 15px; flex-shrink: 0; }
+.alert strong { font-weight: 600; }
+
+/* ── Divider ── */
+.divider {
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Spinner ── */
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+.spinner.dark {
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Done state ── */
+.done-hero {
+  text-align: center;
+  padding: 20px 0 12px;
+}
+
+.done-icon {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: var(--green-bg);
+  border: 2px solid var(--green-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px;
+  margin: 0 auto 16px;
+}
+
+.done-title {
+  font-family: 'Lora', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.done-sub { font-size: 14px; color: var(--text-2); }
+
+/* Delete section */
+.danger-section {
+  margin-top: 8px;
+  padding: 16px;
+  background: var(--red-bg);
+  border: 1px solid var(--red-border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.danger-text { font-size: 13px; color: var(--red); }
+.danger-text strong { font-weight: 600; }
+
+/* Hidden */
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-logo">Talon<span>.</span>One</div>
+  <div class="header-sep"></div>
+  <div class="header-subtitle">Campaign Copier</div>
+</header>
+
+<div class="layout">
+
+  <!-- Stepper -->
+  <div class="stepper" id="stepper">
+    <div class="step-item active" data-step="1">
+      <div class="step-circle">1</div>
+      <div class="step-label">Source Login</div>
+    </div>
+    <div class="step-item" data-step="2">
+      <div class="step-circle">2</div>
+      <div class="step-label">Source App</div>
+    </div>
+    <div class="step-item" data-step="3">
+      <div class="step-circle">3</div>
+      <div class="step-label">Dest. Login</div>
+    </div>
+    <div class="step-item" data-step="4">
+      <div class="step-circle">4</div>
+      <div class="step-label">Dest. App</div>
+    </div>
+    <div class="step-item" data-step="5">
+      <div class="step-circle">5</div>
+      <div class="step-label">Loyalty Map</div>
+    </div>
+    <div class="step-item" data-step="6">
+      <div class="step-circle">6</div>
+      <div class="step-label">Scope</div>
+    </div>
+    <div class="step-item" data-step="7">
+      <div class="step-circle">7</div>
+      <div class="step-label">Review & Copy</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ STEP 1: Source Login ═══════════════ -->
+  <div id="step-1" class="card">
+    <div class="card-head">
+      <div class="step-tag"><div class="step-tag-dot"></div>Step 1 of 7</div>
+      <div class="card-title">Log in to your Source</div>
+      <div class="card-hint">Connect to the Talon.One deployment you want to copy campaigns <em>from</em>.</div>
+    </div>
+    <div class="card-body">
+      <div class="field">
+        <label>Subdomain</label>
+        <input id="srcSubdomain" type="text" placeholder="mycompany.talon.one"/>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Email</label>
+          <input id="srcEmail" type="email" placeholder="you@company.com"/>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input id="srcPassword" type="password" placeholder="••••••••"/>
+        </div>
+      </div>
+      <div id="srcError" class="alert alert-error hidden">
+        <span class="alert-icon">⚠</span>
+        <span id="srcErrorMsg"></span>
+      </div>
+      <div id="srcSuccess" class="alert alert-success hidden">
+        <span class="alert-icon">✓</span>
+        <span id="srcSuccessMsg"></span>
+      </div>
+    </div>
+    <div class="card-nav">
+      <div></div>
+      <button class="btn btn-primary btn-lg" id="srcConnectBtn" onclick="connectStep1()">
+        Connect to Source →
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ STEP 2: Source App ═══════════════ -->
+  <div id="step-2" class="card hidden">
+    <div class="card-head">
+      <div class="step-tag"><div class="step-tag-dot"></div>Step 2 of 7</div>
+      <div class="card-title">Select Source Application</div>
+      <div class="card-hint">Choose the application whose campaigns you want to copy.</div>
+    </div>
+    <div class="card-body">
+      <input class="app-search-input" id="srcAppSearch" placeholder="Search applications…" oninput="filterApps('src')"/>
+      <div class="app-list" id="srcAppList"></div>
+    </div>
+    <div class="card-nav">
+      <button class="btn btn-secondary" onclick="goToStep(1)">← Back</button>
+      <button class="btn btn-primary btn-lg" id="srcAppNextBtn" onclick="goToStep(3)" disabled>
+        Continue →
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ STEP 3: Dest Login ═══════════════ -->
+  <div id="step-3" class="card hidden">
+    <div class="card-head">
+      <div class="step-tag"><div class="step-tag-dot"></div>Step 3 of 7</div>
+      <div class="card-title">Log in to your Destination</div>
+      <div class="card-hint">Connect to the Talon.One deployment you want to copy campaigns <em>into</em>.</div>
+    </div>
+    <div class="card-body">
+      <div class="field">
+        <label>Subdomain</label>
+        <input id="dstSubdomain" type="text" placeholder="mycompany.talon.one"/>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Email</label>
+          <input id="dstEmail" type="email" placeholder="you@company.com"/>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input id="dstPassword" type="password" placeholder="••••••••"/>
+        </div>
+      </div>
+      <div id="dstError" class="alert alert-error hidden">
+        <span class="alert-icon">⚠</span>
+        <span id="dstErrorMsg"></span>
+      </div>
+      <div id="dstSuccess" class="alert alert-success hidden">
+        <span class="alert-icon">✓</span>
+        <span id="dstSuccessMsg"></span>
+      </div>
+    </div>
+    <div class="card-nav">
+      <button class="btn btn-secondary" onclick="goToStep(2)">← Back</button>
+      <button class="btn btn-primary btn-lg" id="dstConnectBtn" onclick="connectStep3()">
+        Connect to Destination →
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ STEP 4: Dest App ═══════════════ -->
+  <div id="step-4" class="card hidden">
+    <div class="card-head">
+      <div class="step-tag"><div class="step-tag-dot"></div>Step 4 of 7</div>
+      <div class="card-title">Select Destination Application</div>
+      <div class="card-hint">Choose the application to copy campaigns into.</div>
+    </div>
+    <div class="card-body">
+      <input class="app-search-input" id="dstAppSearch" placeholder="Search applications…" oninput="filterApps('dst')"/>
+      <div class="app-list" id="dstAppList"></div>
+    </div>
+    <div class="card-nav">
+      <button class="btn btn-secondary" onclick="goToStep(3)">← Back</button>
+      <button class="btn btn-primary btn-lg" id="dstAppNextBtn" onclick="goToStep(5)" disabled>
+        Continue →
+      </button>
+    </div>
+
+    <!-- Danger zone -->
+      <div id="deleteSection" class="danger-section">
+        <div class="danger-text">
+          <strong>Danger zone:</strong> permanently delete all campaigns in the destination app before copying. May take up to 10 min to process.
+        </div>
+        <button class="btn btn-danger" id="deleteBtn" onclick="confirmDeleteAll()">🗑 Delete All in Dest.</button>
+      </div>
+  </div>
+
+  <!-- ═══════════════ STEP 5: Loyalty Mapping ═══════════════ -->
+  <div id="step-5" class="card hidden">
+    <div class="card-head">
+      <div class="step-tag"><div class="step-tag-dot"></div>Step 5 of 7</div>
+      <div class="card-title">Map Loyalty Programs</div>
+      <div class="card-hint">Match loyalty programs from the source to their equivalents in the destination. Skip any you don't need to remap.</div>
+    </div>
+    <div class="card-body" id="loyaltyMapBody">
+      <!-- rendered dynamically -->
+    </div>
+    <div class="card-nav">
+      <button class="btn btn-secondary" onclick="goToStep(4)">← Back</button>
+      <button class="btn btn-primary btn-lg" onclick="goToStep(6)">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ STEP 6: Campaign Scope ═══════════════ -->
+  <div id="step-6" class="card hidden">
+    <div class="card-head">
+      <div class="step-tag"><div class="step-tag-dot"></div>Step 6 of 7</div>
+      <div class="card-title">Select Campaigns to Copy</div>
+      <div class="card-hint">Choose which campaigns from <strong id="scopeSrcAppName">the source application</strong> to copy.</div>
+    </div>
+    <div class="card-body">
+      <div class="mode-grid">
+        <div class="mode-card" id="modeAll" onclick="setMode('all')">
+          <div class="mode-icon">📋</div>
+          <div class="mode-title">All Campaigns</div>
+          <div class="mode-desc" id="modeAllDesc">Copy every campaign</div>
+        </div>
+        <div class="mode-card" id="modeActive" onclick="setMode('active')">
+          <div class="mode-icon">✅</div>
+          <div class="mode-title">Active Only</div>
+          <div class="mode-desc" id="modeActiveDesc">Enabled, non-expired</div>
+        </div>
+        <div class="mode-card" id="modeSingle" onclick="setMode('single')">
+          <div class="mode-icon">🎯</div>
+          <div class="mode-title">Pick One</div>
+          <div class="mode-desc">Choose a single campaign</div>
+        </div>
+      </div>
+      <div id="singlePickSection" class="field hidden">
+        <label>Campaign</label>
+        <select id="campaignPicker" onchange="updateStep6Btn()">
+          <option value="">— select a campaign —</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-nav">
+      <button class="btn btn-secondary" onclick="goToStep(5)">← Back</button>
+      <button class="btn btn-primary btn-lg" id="step6NextBtn" onclick="goToStep(7)" disabled>
+        Review →
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ STEP 7: Review & Copy ═══════════════ -->
+  <div id="step-7" class="card hidden">
+    <div class="card-head">
+      <div class="step-tag"><div class="step-tag-dot"></div>Step 7 of 7</div>
+      <div class="card-title">Review & Copy</div>
+      <div class="card-hint">Double-check everything below, then start the copy. This cannot be undone.</div>
+    </div>
+    <div class="card-body">
+      <div class="review-table" id="reviewTable">
+        <!-- rendered dynamically -->
+      </div>
+
+      <div id="progressSection" class="hidden" style="display:flex;flex-direction:column;gap:8px;">
+        <div class="divider"></div>
+        <div class="progress-wrap">
+          <div class="progress-bar" id="progressBar" style="width:0%"></div>
+        </div>
+        <div class="progress-label" id="progressLabel">Preparing…</div>
+      </div>
+
+      <div id="resultsSection" class="hidden" style="display:flex;flex-direction:column;gap:8px;">
+        <div class="divider"></div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Results</div>
+        <div id="resultsList" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
+      <div id="doneSection" class="hidden">
+        <div class="done-hero">
+          <div class="done-icon">✓</div>
+          <div class="done-title">Copy Complete</div>
+          <div class="done-sub" id="doneSub">All campaigns have been copied.</div>
+        </div>
+        <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="resetAll()">
+          ↩ Start a new copy
+        </button>
+      </div>
+    </div>
+    <div class="card-nav" id="copyNav">
+      <button class="btn btn-secondary" onclick="goToStep(6)">← Back</button>
+      <button class="btn btn-primary btn-lg" id="copyBtn" onclick="runCopy()">
+        Copy Campaigns →
+      </button>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="log-section" id="logSection">
+    <div class="log-head" onclick="toggleLog()">
+      Activity Log
+      <span class="log-toggle" id="logToggleLabel">▼ show</span>
+    </div>
+    <div class="log-body hidden" id="logBody"></div>
+  </div>
+
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════
+const S = {
+  src: { subdomain:'', token:'', connected:false, apps:[], selectedApp:null, campaigns:[], loyaltyPrograms:[] },
+  dst: { subdomain:'', token:'', connected:false, apps:[], selectedApp:null, loyaltyPrograms:[] },
+  mode: null,
+  loyaltyMapping: {},
+  currentStep: 1
+};
+
+// ════════════════════════════════════════════════
+//  LOG
+// ════════════════════════════════════════════════
+let logVisible = false;
+
+function ts() {
+  return new Date().toLocaleTimeString('en-US', { hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+function log(msg, type) {
+  type = type || 'info';
+  document.getElementById('logSection').classList.add('visible');
+  var body = document.getElementById('logBody');
+  var e = document.createElement('div');
+  e.className = 'log-entry ' + (type || 'default');
+  e.innerHTML = '<span class="log-ts">' + ts() + '</span><span class="log-msg">' + msg + '</span>';
+  body.appendChild(e);
+  body.scrollTop = body.scrollHeight;
+}
+
+function toggleLog() {
+  logVisible = !logVisible;
+  document.getElementById('logBody').classList.toggle('hidden', !logVisible);
+  document.getElementById('logToggleLabel').textContent = logVisible ? '▲ hide' : '▼ show';
+}
+
+// ════════════════════════════════════════════════
+//  STEPPER UI
+// ════════════════════════════════════════════════
+function updateStepper(step) {
+  document.querySelectorAll('.step-item').forEach(function(el) {
+    var n = parseInt(el.dataset.step);
+    el.classList.toggle('active', n === step);
+    el.classList.toggle('done', n < step);
+  });
+}
+
+function showStep(step) {
+  for (var i = 1; i <= 7; i++) {
+    var el = document.getElementById('step-' + i);
+    if (el) el.classList.toggle('hidden', i !== step);
+  }
+  updateStepper(step);
+  S.currentStep = step;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function goToStep(step) {
+  showStep(step);
+  if (step === 5) renderLoyaltyMapping();
+  if (step === 6) renderScopeStep();
+  if (step === 7) renderReview();
+}
+
+// ════════════════════════════════════════════════
+//  API HELPERS
+// ════════════════════════════════════════════════
+function baseUrl(side) { return 'https://' + S[side].subdomain; }
+function bearerHeaders(side) {
+  return { 'Authorization': 'Bearer ' + S[side].token, 'Content-Type': 'application/json' };
+}
+
+async function apiFetch(url, opts) {
+  opts = opts || {};
+  var r = await fetch(url, opts);
+  if (!r.ok) {
+    var ct = r.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      var json = await r.json();
+      throw new Error('HTTP ' + r.status + ': ' + (json.message || json.error || JSON.stringify(json)));
+    }
+    var t = await r.text();
+    throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 160));
+  }
+  var ct = r.headers.get('content-type') || '';
+  return ct.includes('application/json') ? r.json() : r.text();
+}
+
+// ════════════════════════════════════════════════
+//  SESSION
+// ════════════════════════════════════════════════
+async function createSession(side) {
+  var sub   = document.getElementById(side + 'Subdomain').value.trim();
+  var email = document.getElementById(side + 'Email').value.trim();
+  var pass  = document.getElementById(side + 'Password').value;
+  if (!sub || !email || !pass) throw new Error('Subdomain, email and password are all required.');
+  S[side].subdomain = sub;
+  var data = await apiFetch('https://' + sub + '/v1/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email, password: pass })
+  });
+  S[side].token = data.token;
+}
+
+async function destroySession(side) {
+  if (!S[side].token) return;
+  try {
+    await fetch(baseUrl(side) + '/v1/sessions', { method: 'DELETE', headers: bearerHeaders(side) });
+  } catch(e) {}
+  S[side].token = '';
+}
+
+async function destroyAllSessions() {
+  await Promise.allSettled([destroySession('src'), destroySession('dst')]);
+}
+
+// ════════════════════════════════════════════════
+//  STEP 1: Source connect
+// ════════════════════════════════════════════════
+async function connectStep1() {
+  var btn = document.getElementById('srcConnectBtn');
+  var errEl = document.getElementById('srcError');
+  var okEl = document.getElementById('srcSuccess');
+  errEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Connecting…';
+
+  try {
+    await createSession('src');
+    var data = await apiFetch(baseUrl('src') + '/v1/applications', { headers: bearerHeaders('src') });
+    S.src.apps = data.data || [];
+    S.src.connected = true;
+    log('Source connected — ' + S.src.apps.length + ' app(s) found', 'success');
+
+    // fetch loyalty programs
+    try {
+      var lpData = await apiFetch(baseUrl('src') + '/v1/loyalty_programs', { headers: bearerHeaders('src') });
+      S.src.loyaltyPrograms = lpData.data || [];
+    } catch(e) { log('Could not load source loyalty programs: ' + e.message, 'warn'); }
+
+    document.getElementById('srcSubdomain').disabled = true;
+    document.getElementById('srcEmail').disabled = true;
+    document.getElementById('srcPassword').disabled = true;
+
+    renderApps('src');
+    goToStep(2);
+  } catch(e) {
+    S.src.token = '';
+    document.getElementById('srcErrorMsg').textContent = e.message;
+    errEl.classList.remove('hidden');
+    log('Source connection failed: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = 'Connect to Source →';
+}
+
+// ════════════════════════════════════════════════
+//  STEP 3: Dest connect
+// ════════════════════════════════════════════════
+async function connectStep3() {
+  var btn = document.getElementById('dstConnectBtn');
+  var errEl = document.getElementById('dstError');
+  var okEl = document.getElementById('dstSuccess');
+  errEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Connecting…';
+
+  try {
+    await createSession('dst');
+    var data = await apiFetch(baseUrl('dst') + '/v1/applications', { headers: bearerHeaders('dst') });
+    S.dst.apps = data.data || [];
+    S.dst.connected = true;
+    log('Destination connected — ' + S.dst.apps.length + ' app(s) found', 'success');
+
+    document.getElementById('dstSubdomain').disabled = true;
+    document.getElementById('dstEmail').disabled = true;
+    document.getElementById('dstPassword').disabled = true;
+
+    renderApps('dst');
+    goToStep(4);
+  } catch(e) {
+    S.dst.token = '';
+    document.getElementById('dstErrorMsg').textContent = e.message;
+    errEl.classList.remove('hidden');
+    log('Destination connection failed: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = 'Connect to Destination →';
+}
+
+// ════════════════════════════════════════════════
+//  APP LISTS
+// ════════════════════════════════════════════════
+function renderApps(side) {
+  var list = document.getElementById(side + 'AppList');
+  list.innerHTML = '';
+  if (!S[side].apps.length) {
+    list.innerHTML = '<div class="app-empty">No applications found.</div>';
+    return;
+  }
+  S[side].apps.forEach(function(app) {
+    var el = document.createElement('div');
+    el.className = 'app-item';
+    el.id = side + 'AppEl_' + app.id;
+    el.dataset.name = app.name.toLowerCase();
+    el.innerHTML =
+      '<div class="app-icon">🏢</div>' +
+      '<div class="app-info"><div class="app-name">' + app.name + '</div><div class="app-meta">ID: ' + app.id + ' · ' + (app.timezone || 'UTC') + '</div></div>' +
+      '<div class="app-check" id="' + side + 'Check_' + app.id + '"></div>';
+    el.onclick = function() { side === 'src' ? selectSrcApp(app) : selectDstApp(app); };
+    list.appendChild(el);
+  });
+}
+
+function filterApps(side) {
+  var q = document.getElementById(side + 'AppSearch').value.toLowerCase();
+  var list = document.getElementById(side + 'AppList');
+  var any = false;
+  list.querySelectorAll('.app-item').forEach(function(el) {
+    var match = el.dataset.name.includes(q);
+    el.style.display = match ? '' : 'none';
+    if (match) any = true;
+  });
+  var noRes = list.querySelector('.app-empty');
+  if (!any && !noRes) {
+    var d = document.createElement('div'); d.className = 'app-empty'; d.textContent = 'No results.';
+    list.appendChild(d);
+  } else if (any && noRes && noRes.textContent === 'No results.') {
+    noRes.remove();
+  }
+}
+
+async function selectSrcApp(app) {
+  document.querySelectorAll('#srcAppList .app-item').forEach(function(e) {
+    e.classList.remove('selected');
+    var chk = e.querySelector('[id^="srcCheck_"]'); if (chk) chk.innerHTML = '';
+  });
+  S.src.selectedApp = app;
+  S.src.campaigns = [];
+  S.loyaltyMapping = {};
+  var el = document.getElementById('srcAppEl_' + app.id);
+  if (el) el.classList.add('selected');
+  log('Source app selected: ' + app.name);
+
+  // fetch campaigns
+  try {
+    var data = await apiFetch(baseUrl('src') + '/v1/applications/' + app.id + '/campaigns', { headers: bearerHeaders('src') });
+    S.src.campaigns = data.data || [];
+    log('Loaded ' + S.src.campaigns.length + ' campaign(s)', 'success');
+  } catch(e) { log('Failed to load campaigns: ' + e.message, 'error'); }
+
+  document.getElementById('srcAppNextBtn').disabled = false;
+}
+
+async function selectDstApp(app) {
+  document.querySelectorAll('#dstAppList .app-item').forEach(function(e) {
+    e.classList.remove('selected');
+    var chk = e.querySelector('[id^="dstCheck_"]'); if (chk) chk.innerHTML = '';
+  });
+  S.dst.selectedApp = app;
+  var el = document.getElementById('dstAppEl_' + app.id);
+  if (el) el.classList.add('selected');
+  log('Destination app selected: ' + app.name);
+
+  // fetch dst loyalty programs
+  try {
+    var lpData = await apiFetch(baseUrl('dst') + '/v1/loyalty_programs', { headers: bearerHeaders('dst') });
+    S.dst.loyaltyPrograms = lpData.data || [];
+    log('Loaded destination loyalty programs', 'success');
+  } catch(e) { log('Could not load destination loyalty programs: ' + e.message, 'warn'); }
+
+  document.getElementById('dstAppNextBtn').disabled = false;
+}
+
+// ════════════════════════════════════════════════
+//  STEP 5: Loyalty mapping
+// ════════════════════════════════════════════════
+function filterLoyaltyForApp(lps, appId) {
+  return lps.filter(function(lp) {
+    var apps = lp.subscribedApplications || lp.subscribedApplicationsIds || [];
+    if (!apps || !apps.length) return false;
+    if (typeof apps[0] === 'object') return apps.some(function(a) { return a.id === appId; });
+    return apps.includes(appId);
+  });
+}
+
+function renderLoyaltyMapping() {
+  var body = document.getElementById('loyaltyMapBody');
+  if (!S.src.selectedApp || !S.dst.selectedApp) { body.innerHTML = ''; return; }
+
+  var srcLps = filterLoyaltyForApp(S.src.loyaltyPrograms || [], S.src.selectedApp.id);
+
+  if (!srcLps.length) {
+    body.innerHTML = '<div class="loyalty-empty">No loyalty programs are connected to the source application. You can skip this step.</div>';
+    return;
+  }
+
+  var dstLps = filterLoyaltyForApp(S.dst.loyaltyPrograms || [], S.dst.selectedApp.id);
+  var html = '';
+
+  srcLps.forEach(function(srcLp) {
+    var srcName = srcLp.title || srcLp.name || 'Program ' + srcLp.id;
+    html += '<div class="loyalty-map-item">';
+    html += '<div class="lm-label">' + srcName + '<div class="lm-sublabel">Source ID: ' + srcLp.id + '</div></div>';
+    html += '<div class="lm-arrow">→</div>';
+    html += '<div class="lm-select-wrap"><select onchange="updateLpMapping(' + srcLp.id + ', this.value)">';
+    html += '<option value="">— No mapping —</option>';
+    if (!dstLps.length) {
+      html += '<option disabled>No programs in destination app</option>';
+    } else {
+      dstLps.forEach(function(dstLp) {
+        var dstName = dstLp.title || dstLp.name || 'Program ' + dstLp.id;
+        var sel = (S.loyaltyMapping[srcLp.id] == dstLp.id) ? 'selected' : '';
+        html += '<option value="' + dstLp.id + '" ' + sel + '>' + dstName + ' (ID: ' + dstLp.id + ')</option>';
+      });
+    }
+    html += '</select></div></div>';
+  });
+
+  body.innerHTML = html;
+}
+
+function updateLpMapping(srcId, dstId) {
+  if (dstId) {
+    S.loyaltyMapping[srcId] = parseInt(dstId, 10);
+    log('Loyalty map: Src ID ' + srcId + ' → Dst ID ' + dstId, 'info');
+  } else {
+    delete S.loyaltyMapping[srcId];
+  }
+}
+
+// ════════════════════════════════════════════════
+//  STEP 6: Scope
+// ════════════════════════════════════════════════
+function renderScopeStep() {
+  if (S.src.selectedApp) {
+    document.getElementById('scopeSrcAppName').textContent = '"' + S.src.selectedApp.name + '"';
+  }
+  var active = S.src.campaigns.filter(function(c) {
+    return c.state === 'enabled' && (!c.endTime || new Date(c.endTime) > new Date());
+  });
+  document.getElementById('modeAllDesc').textContent = S.src.campaigns.length + ' campaigns total';
+  document.getElementById('modeActiveDesc').textContent = active.length + ' active now';
+
+  var picker = document.getElementById('campaignPicker');
+  picker.innerHTML = '<option value="">— select a campaign —</option>';
+  S.src.campaigns.forEach(function(c) {
+    var o = document.createElement('option');
+    o.value = c.id;
+    o.textContent = '[' + c.id + '] ' + c.name + ' (' + c.state + ')';
+    picker.appendChild(o);
+  });
+
+  if (S.mode) setMode(S.mode);
+}
+
+function setMode(m) {
+  S.mode = m;
+  ['all','active','single'].forEach(function(id) {
+    document.getElementById('mode' + id.charAt(0).toUpperCase() + id.slice(1)).classList.toggle('selected', m === id);
+  });
+  document.getElementById('singlePickSection').classList.toggle('hidden', m !== 'single');
+  updateStep6Btn();
+}
+
+function updateStep6Btn() {
+  var ready = S.mode && (S.mode !== 'single' || document.getElementById('campaignPicker').value);
+  document.getElementById('step6NextBtn').disabled = !ready;
+}
+
+// ════════════════════════════════════════════════
+//  STEP 7: Review
+// ════════════════════════════════════════════════
+function renderReview() {
+  var modeLabels = { all: 'All campaigns', active: 'Active campaigns only', single: 'Single campaign' };
+  var modeLabel = modeLabels[S.mode] || '—';
+  if (S.mode === 'single') {
+    var picker = document.getElementById('campaignPicker');
+    var selected = picker.options[picker.selectedIndex];
+    if (selected) modeLabel = selected.textContent;
+  } else if (S.mode === 'all') {
+    modeLabel = 'All campaigns (' + S.src.campaigns.length + ')';
+  } else if (S.mode === 'active') {
+    var activeCount = S.src.campaigns.filter(function(c) {
+      return c.state === 'enabled' && (!c.endTime || new Date(c.endTime) > new Date());
+    }).length;
+    modeLabel = 'Active campaigns only (' + activeCount + ')';
+  }
+
+  var mappings = Object.keys(S.loyaltyMapping);
+  var mappingLabel = mappings.length ? mappings.length + ' program(s) mapped' : 'None';
+
+  document.getElementById('reviewTable').innerHTML =
+    '<div class="review-row"><div class="review-icon">📤</div><div class="review-key">Source</div><div class="review-val">' + (S.src.selectedApp ? S.src.selectedApp.name : '—') + ' <span style="color:var(--text-3);font-size:12px;">(' + S.src.subdomain + ')</span></div></div>' +
+    '<div class="review-row"><div class="review-icon">📥</div><div class="review-key">Destination</div><div class="review-val">' + (S.dst.selectedApp ? S.dst.selectedApp.name : '—') + ' <span style="color:var(--text-3);font-size:12px;">(' + S.dst.subdomain + ')</span></div></div>' +
+    '<div class="review-row"><div class="review-icon">🎯</div><div class="review-key">Scope</div><div class="review-val">' + modeLabel + '</div></div>' +
+    '<div class="review-row"><div class="review-icon">🏆</div><div class="review-key">Loyalty Map</div><div class="review-val">' + mappingLabel + '</div></div>';
+
+  // Reset result/progress sections
+  document.getElementById('progressSection').classList.add('hidden');
+  document.getElementById('resultsSection').classList.add('hidden');
+  document.getElementById('doneSection').classList.add('hidden');
+  document.getElementById('resultsList').innerHTML = '';
+  document.getElementById('copyNav').classList.remove('hidden');
+  document.getElementById('deleteSection').classList.remove('hidden');
+  document.getElementById('copyBtn').disabled = false;
+  document.getElementById('copyBtn').innerHTML = 'Copy Campaigns →';
+  document.getElementById('deleteBtn').disabled = false;
+}
+
+// ════════════════════════════════════════════════
+//  PROGRESS / RESULTS
+// ════════════════════════════════════════════════
+function setProgress(done, total, label) {
+  var sec = document.getElementById('progressSection');
+  sec.classList.remove('hidden');
+  sec.style.display = 'flex';
+  document.getElementById('progressBar').style.width = total ? Math.round(done / total * 100) + '%' : '0%';
+  document.getElementById('progressLabel').textContent = label;
+}
+
+function addResult(name, ok, detail) {
+  var sec = document.getElementById('resultsSection');
+  sec.classList.remove('hidden');
+  sec.style.display = 'flex';
+  var el = document.createElement('div');
+  el.className = 'result-item ' + (ok ? 'ok' : 'fail');
+  el.innerHTML = '<span class="result-icon">' + (ok ? '✓' : '✗') + '</span><div><div class="result-name">' + name + '</div><div class="result-detail">' + detail + '</div></div>';
+  document.getElementById('resultsList').appendChild(el);
+}
+
+// ════════════════════════════════════════════════
+//  COPY
+// ════════════════════════════════════════════════
+function getCampaignsToCopy() {
+  if (S.mode === 'all') return S.src.campaigns;
+  if (S.mode === 'active') return S.src.campaigns.filter(function(c) {
+    return c.state === 'enabled' && (!c.endTime || new Date(c.endTime) > new Date());
+  });
+  var id = parseInt(document.getElementById('campaignPicker').value);
+  return S.src.campaigns.filter(function(c) { return c.id === id; });
+}
+
+async function runCopy() {
+  var campaigns = getCampaignsToCopy();
+  if (!campaigns.length) { alert('No campaigns match the selected mode.'); return; }
+
+  document.getElementById('copyBtn').disabled = true;
+  document.getElementById('deleteBtn').disabled = true;
+  document.getElementById('copyBtn').innerHTML = '<div class="spinner"></div> Copying…';
+  document.getElementById('copyNav').classList.add('hidden');
+  document.getElementById('deleteSection').classList.add('hidden');
+  document.getElementById('resultsList').innerHTML = '';
+  document.getElementById('resultsSection').classList.add('hidden');
+
+  var dstAppId = S.dst.selectedApp.id;
+  log('Starting copy of ' + campaigns.length + ' campaign(s) → ' + S.dst.selectedApp.name, 'info');
+  var done = 0;
+
+  try {
+    for (var i = 0; i < campaigns.length; i++) {
+      var c = campaigns[i];
+      setProgress(done, campaigns.length, 'Copying "' + c.name + '"…');
+      try {
+        await copyCampaign(c, dstAppId);
+        addResult(c.name, true, 'Copied successfully (campaign + ruleset + collections + attributes)');
+        log('✓ "' + c.name + '" copied', 'success');
+      } catch(e) {
+        addResult(c.name, false, e.message);
+        log('✗ "' + c.name + '" failed: ' + e.message, 'error');
+      }
+      done++;
+      setProgress(done, campaigns.length, done + ' of ' + campaigns.length + ' complete');
+    }
+    log('Copy complete. Cleaning up sessions…', 'info');
+
+    var doneEl = document.getElementById('doneSection');
+    doneEl.classList.remove('hidden');
+    document.getElementById('doneSub').textContent = done + ' of ' + campaigns.length + ' campaign(s) processed.';
+  } finally {
+    await destroyAllSessions();
+    log('Sessions destroyed.', 'info');
+  }
+}
+
+// ════════════════════════════════════════════════
+//  COPY SINGLE CAMPAIGN (from original)
+// ════════════════════════════════════════════════
+async function copyCampaign(c, dstAppId) {
+  var srcAppId = S.src.selectedApp.id;
+  var srcCampaign = await apiFetch(baseUrl('src') + '/v1/applications/' + srcAppId + '/campaigns/' + c.id, { headers: bearerHeaders('src') });
+  var srcRuleset = null;
+  if (srcCampaign.activeRulesetId) {
+    try {
+      srcRuleset = await apiFetch(baseUrl('src') + '/v1/applications/' + srcAppId + '/campaigns/' + c.id + '/rulesets/' + srcCampaign.activeRulesetId, { headers: bearerHeaders('src') });
+    } catch(e) { log('  ⚠ Could not fetch ruleset: ' + e.message, 'warn'); }
+  }
+  var srcCollections = [];
+  try {
+    var cd = await apiFetch(baseUrl('src') + '/v1/applications/' + srcAppId + '/campaigns/' + c.id + '/collections', { headers: bearerHeaders('src') });
+    srcCollections = cd.data || [];
+  } catch(e) { log('  ⚠ Could not fetch collections: ' + e.message, 'warn'); }
+
+  var allowed = ['name','state','tags','limits','features','description','startTime','endTime',
+    'attributes','reevaluateOnReturn','couponSettings','referralSettings','campaignGroups',
+    'type','linkedStoreIds','linkedStoreIntegrationIds','targetedAudienceIds','contextId','evaluationGroupId'];
+  var body = {};
+  allowed.forEach(function(k) { if (srcCampaign[k] !== undefined) body[k] = srcCampaign[k]; });
+  body.state = 'disabled';
+
+  var newCampaign = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns', {
+    method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(body)
+  });
+  log('  → Campaign created (ID: ' + newCampaign.id + ')', 'info');
+
+  if (srcRuleset) {
+    try { await copyCustomAttributes(srcRuleset, dstAppId); } catch(e) { log('  ⚠ Attribute copy issue: ' + e.message, 'warn'); }
+    var rb = Object.assign({}, srcRuleset);
+    ['id', 'campaignId', 'created', 'userId'].forEach(function(k) { delete rb[k]; });
+    rb.activate = true;
+    if (S.loyaltyMapping && Object.keys(S.loyaltyMapping).length > 0) rb = mapLoyaltyIdsInRuleset(rb, S.loyaltyMapping);
+    await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + newCampaign.id + '/rulesets', {
+      method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(rb)
+    });
+    log('  → Ruleset created', 'info');
+  }
+
+  for (var i = 0; i < srcCollections.length; i++) {
+    var col = srcCollections[i];
+    try {
+      var csv = await apiFetch(baseUrl('src') + '/v1/applications/' + srcAppId + '/campaigns/' + c.id + '/collections/' + col.id + '/export', { headers: bearerHeaders('src') });
+      var newCol = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + newCampaign.id + '/collections', {
+        method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify({ name: col.name, description: col.description || '' })
+      });
+      var fd = new FormData();
+      fd.append('upFile', new Blob([csv], { type: 'text/csv' }), 'data.csv');
+      await fetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + newCampaign.id + '/collections/' + newCol.id + '/import', {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + S.dst.token }, body: fd
+      });
+      log('  → Collection "' + col.name + '" copied', 'info');
+    } catch(e) { log('  ⚠ Collection "' + col.name + '" failed: ' + e.message, 'warn'); }
+  }
+
+  try { await copyCoupons(srcAppId, c.id, dstAppId, newCampaign.id); } catch(e) { log('  ⚠ Coupon copy issue: ' + e.message, 'warn'); }
+}
+
+// ════════════════════════════════════════════════
+//  CUSTOM ATTRIBUTES (from original)
+// ════════════════════════════════════════════════
+function extractAttributes(arr, out) {
+  for (var i = 0; i < arr.length; i++) {
+    var a = arr[i];
+    if (a === 'Attributes') {
+      var map = { Profile:'CustomerProfile', Session:'CustomerSession', Item:'CartItem' };
+      out.push({ entity: map[arr[i-1]] || arr[i-1], name: arr[i+1] });
+    } else if (Array.isArray(a)) { extractAttributes(a, out); }
+  }
+}
+
+async function copyCustomAttributes(ruleset, dstAppId) {
+  var needed = [];
+  (ruleset.rules || []).forEach(function(r) {
+    extractAttributes(r.condition || [], needed);
+    extractAttributes(r.effects || [], needed);
+  });
+  (ruleset.bindings || []).forEach(function(b) { extractAttributes(b.expression || [], needed); });
+  if (!needed.length) return;
+  var results = await Promise.all([
+    apiFetch(baseUrl('dst') + '/v1/attributes', { headers: bearerHeaders('dst') }),
+    apiFetch(baseUrl('src') + '/v1/attributes', { headers: bearerHeaders('src') })
+  ]);
+  var existing = results[0].data || [];
+  var srcAll   = results[1].data || [];
+  for (var i = 0; i < needed.length; i++) {
+    var n = needed[i];
+    var found = existing.find(function(e) { return e.name === n.name && e.entity === n.entity; });
+    if (found) {
+      if (found.subscribedApplicationsIds && found.subscribedApplicationsIds.length && !found.subscribedApplicationsIds.includes(dstAppId)) {
+        var upd = Object.assign({}, found);
+        ['id','created','accountId'].forEach(function(k) { delete upd[k]; });
+        upd.subscribedApplicationsIds = found.subscribedApplicationsIds.concat([dstAppId]);
+        await apiFetch(baseUrl('dst') + '/v1/attributes/' + found.id, { method: 'PUT', headers: bearerHeaders('dst'), body: JSON.stringify(upd) });
+      }
+    } else {
+      var srcDef = srcAll.find(function(e) { return e.name === n.name && e.entity === n.entity; });
+      if (srcDef) {
+        var b = Object.assign({}, srcDef);
+        ['id','created','accountId'].forEach(function(k) { delete b[k]; });
+        if (b.entity !== 'Entity') delete b.eventType;
+        if (b.entity === 'CartItem') b.allowedSubscriptions = ['application'];
+        b.subscribedApplicationsIds = [dstAppId];
+        await apiFetch(baseUrl('dst') + '/v1/attributes', { method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(b) });
+        log('  → Attribute "' + n.name + '" created', 'info');
+      }
+    }
+  }
+}
+
+// ════════════════════════════════════════════════
+//  LOYALTY ID MAPPING IN RULESET (from original)
+// ════════════════════════════════════════════════
+function mapLoyaltyIdsInRuleset(node, mapping) {
+  if (Array.isArray(node)) {
+    if (node.length > 0 && typeof node[0] === 'string') {
+      var fnName = node[0];
+      var lpIndex = -1;
+      if (fnName.includes('flexible') && (fnName.includes('Loyalty') || fnName.includes('Subledger') || fnName.includes('Tier'))) { lpIndex = 2; }
+      else if (fnName.includes('Loyalty') || fnName.includes('Subledger') || fnName.includes('Tier') || fnName.includes('LP')) { lpIndex = 1; }
+      if (lpIndex > 0 && node.length > lpIndex && typeof node[lpIndex] === 'number') {
+        var oldId = node[lpIndex];
+        if (mapping[oldId]) { node[lpIndex] = mapping[oldId]; }
+      }
+    }
+    for (var i = 0; i < node.length; i++) { node[i] = mapLoyaltyIdsInRuleset(node[i], mapping); }
+  } else if (node !== null && typeof node === 'object') {
+    for (var key in node) { if (Object.prototype.hasOwnProperty.call(node, key)) { node[key] = mapLoyaltyIdsInRuleset(node[key], mapping); } }
+  }
+  return node;
+}
+
+// ════════════════════════════════════════════════
+//  COPY COUPONS (from original)
+// ════════════════════════════════════════════════
+async function copyCoupons(srcAppId, srcCampaignId, dstAppId, dstCampaignId) {
+  try {
+    var res = await apiFetch(baseUrl('src') + '/v1/applications/' + srcAppId + '/campaigns/' + srcCampaignId + '/coupons?pageSize=100', { headers: bearerHeaders('src') });
+    var coupons = res.data || [];
+    if (res.totalResultSize >= 100 || coupons.length >= 100) { log('  → Skipping coupons: ' + (res.totalResultSize || coupons.length) + ' found (limit is 100)', 'warn'); return; }
+    if (!coupons.length) return;
+    log('  → Found ' + coupons.length + ' coupon(s). Copying...', 'info');
+    for (var i = 0; i < coupons.length; i++) {
+      var c = coupons[i];
+      var body = { numberOfCoupons: 1, couponPattern: c.value };
+      ['usageLimit','discountLimit','reservationLimit','startDate','expiryDate','limits','attributes','recipientIntegrationId'].forEach(function(k) {
+        if (c[k] !== undefined && c[k] !== null) body[k] = c[k];
+      });
+      await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + dstCampaignId + '/coupons', { method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(body) });
+    }
+    log('  → Copied ' + coupons.length + ' coupon(s)', 'info');
+  } catch(e) { log('  ⚠ Could not copy coupons: ' + e.message, 'warn'); }
+}
+
+// ════════════════════════════════════════════════
+//  DELETE ALL
+// ════════════════════════════════════════════════
+async function confirmDeleteAll() {
+  var appName = S.dst.selectedApp ? S.dst.selectedApp.name : 'destination';
+  var first = confirm('Delete ALL campaigns in "' + appName + '"?\n\nThis cannot be undone.');
+  if (!first) return;
+  var second = confirm('Second confirmation required.\n\nPermanently delete every campaign in "' + appName + '". Are you absolutely sure?');
+  if (!second) return;
+  await deleteAllDstCampaigns();
+}
+
+async function deleteAllDstCampaigns() {
+  var dstAppId = S.dst.selectedApp.id;
+  var btn = document.getElementById('deleteBtn');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  log('Deleting all campaigns in "' + S.dst.selectedApp.name + '"…', 'warn');
+  try {
+    var data = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns', { headers: bearerHeaders('dst') });
+    var campaigns = data.data || [];
+    if (!campaigns.length) { log('No campaigns found — nothing to delete.', 'info'); btn.disabled = false; btn.innerHTML = '🗑 Delete All in Dest.'; return; }
+    var deleted = 0, failed = 0;
+    for (var i = 0; i < campaigns.length; i++) {
+      var c = campaigns[i];
+      try {
+        await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + c.id, { method: 'DELETE', headers: bearerHeaders('dst') });
+        log('  🗑 Deleted "' + c.name + '"', 'warn'); deleted++;
+      } catch(e) { log('  ✗ Failed to delete "' + c.name + '": ' + e.message, 'error'); failed++; }
+    }
+    log('Delete complete — ' + deleted + ' deleted, ' + failed + ' failed.', failed > 0 ? 'error' : 'success');
+  } catch(e) { log('Failed to fetch destination campaigns: ' + e.message, 'error'); }
+  btn.disabled = false;
+  btn.innerHTML = '🗑 Delete All in Dest.';
+}
+
+// ════════════════════════════════════════════════
+//  RESET
+// ════════════════════════════════════════════════
+function resetAll() {
+  // Reset state
+  S.src = { subdomain:'', token:'', connected:false, apps:[], selectedApp:null, campaigns:[], loyaltyPrograms:[] };
+  S.dst = { subdomain:'', token:'', connected:false, apps:[], selectedApp:null, loyaltyPrograms:[] };
+  S.mode = null;
+  S.loyaltyMapping = {};
+
+  // Re-enable inputs
+  ['src','dst'].forEach(function(side) {
+    ['Subdomain','Email','Password'].forEach(function(f) {
+      var el = document.getElementById(side + f); if (el) { el.disabled = false; el.value = ''; }
+    });
+    var errEl = document.getElementById(side + 'Error'); if (errEl) errEl.classList.add('hidden');
+    var okEl = document.getElementById(side + 'Success'); if (okEl) okEl.classList.add('hidden');
+  });
+
+  document.getElementById('srcAppList').innerHTML = '';
+  document.getElementById('dstAppList').innerHTML = '';
+  document.getElementById('srcConnectBtn').innerHTML = 'Connect to Source →';
+  document.getElementById('dstConnectBtn').innerHTML = 'Connect to Destination →';
+  document.getElementById('srcAppNextBtn').disabled = true;
+  document.getElementById('dstAppNextBtn').disabled = true;
+
+  logVisible = false;
+  document.getElementById('logSection').classList.remove('visible');
+  document.getElementById('logBody').innerHTML = '';
+  document.getElementById('logBody').classList.add('hidden');
+  document.getElementById('logToggleLabel').textContent = '▼ show';
+
+  goToStep(1);
+}
+
+// ════════════════════════════════════════════════
+//  CLEANUP ON UNLOAD
+// ════════════════════════════════════════════════
+window.addEventListener('beforeunload', function() {
+  if (S.src.token) navigator.sendBeacon(baseUrl('src') + '/v1/sessions');
+  if (S.dst.token) navigator.sendBeacon(baseUrl('dst') + '/v1/sessions');
+});
+</script>
+</body>
+</html>
