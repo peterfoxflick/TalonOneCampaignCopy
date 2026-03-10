@@ -983,7 +983,24 @@ select option { background: #fff; }
           <option value="">— select a campaign —</option>
         </select>
       </div>
-    </div>
+
+      <div class="field" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">
+        <label>Evaluation Settings</label>
+        <div class="card-hint" style="margin-bottom: 12px;">Determine how campaigns are organized for evaluation.</div>
+        <div class="mode-grid">
+          <div class="mode-card" id="evalModeDefault" onclick="setEvalMode('default')">
+            <div class="mode-icon">📁</div>
+            <div class="mode-title">Default Root</div>
+            <div class="mode-desc">Place all copied campaigns into the default Root group</div>
+          </div>
+          <div class="mode-card" id="evalModeTree" onclick="setEvalMode('tree')">
+            <div class="mode-icon">🌳</div>
+            <div class="mode-title">Recreate Hierarchy</div>
+            <div class="mode-desc">Recreate evaluation groups and hierarchy</div>
+          </div>
+        </div>
+      </div> 
+    </div>   
     <div class="card-nav">
       <button class="btn btn-secondary" onclick="goToStep(5)">← Back</button>
       <button class="btn btn-primary btn-lg" id="step6NextBtn" onclick="goToStep(7)" disabled>
@@ -1057,7 +1074,9 @@ const S = {
   dst: { subdomain:'', token:'', connected:false, apps:[], selectedApp:null, loyaltyPrograms:[] },
   mode: null,
   loyaltyMapping: {},
-  currentStep: 1
+  currentStep: 1,
+  copyEvalTree: false,
+  groupMap: {}
 };
 
 // ════════════════════════════════════════════════
@@ -1113,6 +1132,14 @@ function goToStep(step) {
   if (step === 6) renderScopeStep();
   if (step === 7) renderReview();
 }
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+  var step1 = document.getElementById('step-1');
+  var step3 = document.getElementById('step-3');
+  if (!step1.classList.contains('hidden')) connectStep1();
+  else if (!step3.classList.contains('hidden')) connectStep3();
+});
 
 // ════════════════════════════════════════════════
 //  API HELPERS
@@ -1418,8 +1445,15 @@ function setMode(m) {
   updateStep6Btn();
 }
 
+function setEvalMode(mode) {
+  S.copyEvalTree = (mode === 'tree');
+  document.getElementById('evalModeDefault').classList.toggle('selected', mode === 'default');
+  document.getElementById('evalModeTree').classList.toggle('selected', mode === 'tree');
+  updateStep6Btn();
+}
+
 function updateStep6Btn() {
-  var ready = S.mode && (S.mode !== 'single' || document.getElementById('campaignPicker').value);
+  var ready = S.mode && (S.mode !== 'single' || document.getElementById('campaignPicker').value) && S.copyEvalTree !== undefined;
   document.getElementById('step6NextBtn').disabled = !ready;
 }
 
@@ -1487,15 +1521,21 @@ function addResult(name, ok, detail) {
 // ════════════════════════════════════════════════
 //  COPY
 // ════════════════════════════════════════════════
+
 function getCampaignsToCopy() {
   if (S.mode === 'all') return S.src.campaigns;
   if (S.mode === 'active') return S.src.campaigns.filter(function(c) {
     return c.state === 'enabled' && (!c.endTime || new Date(c.endTime) > new Date());
   });
+
   var id = parseInt(document.getElementById('campaignPicker').value);
   return S.src.campaigns.filter(function(c) { return c.id === id; });
 }
 
+
+// ════════════════════════════════════════════════
+//  RUN COPY / Start the copy of all campagins
+// ════════════════════════════════════════════════
 async function runCopy() {
   var campaigns = getCampaignsToCopy();
   if (!campaigns.length) { alert('No campaigns match the selected mode.'); return; }
@@ -1513,12 +1553,38 @@ async function runCopy() {
   var done = 0;
 
   try {
+    S.groupMap = {};
+
+    // --- Fetch the Campaign Set and build the lookup map ---
+    setProgress(0, campaigns.length, 'Fetching campaign set mapping...');
+    try {
+      var campSetData = await apiFetch(baseUrl('src') + '/v1/applications/' + S.src.selectedApp.id + '/campaign_set', { headers: bearerHeaders('src') });
+      if (campSetData && campSetData.set) {
+        buildCampaignGroupMap(campSetData.set, null, S.groupMap);
+        log('✓ Source campaign set loaded and mapped', 'success');
+      }
+    } catch(e) {
+      log('⚠ Could not fetch source campaign set: ' + e.message, 'warn');
+    }
+    // ------------------------------------------------------------
+
+    // Copy the evaluation groups first!
+    if (S.copyEvalTree) {
+      setProgress(0, campaigns.length, 'Recreating Evaluation Groups...');
+      try {
+        await copyEvaluationGroups(S.src.selectedApp.id, dstAppId);
+        log('✓ Evaluation groups recreated successfully', 'success');
+      } catch(e) {
+        log('✗ Evaluation group copy failed: ' + e.message, 'error');
+      }
+    }
+
     for (var i = 0; i < campaigns.length; i++) {
       var c = campaigns[i];
       setProgress(done, campaigns.length, 'Copying "' + c.name + '"…');
       try {
         await copyCampaign(c, dstAppId);
-        addResult(c.name, true, 'Copied successfully (campaign + ruleset + collections + attributes)');
+        addResult(c.name, true, 'Copied successfully');
         log('✓ "' + c.name + '" copied', 'success');
       } catch(e) {
         addResult(c.name, false, e.message);
@@ -1537,6 +1603,7 @@ async function runCopy() {
     log('Sessions destroyed.', 'info');
   }
 }
+
 
 // ════════════════════════════════════════════════
 //  COPY SINGLE CAMPAIGN (from original)
@@ -1558,15 +1625,33 @@ async function copyCampaign(c, dstAppId) {
 
   var allowed = ['name','state','tags','limits','features','description','startTime','endTime',
     'attributes','reevaluateOnReturn','couponSettings','referralSettings','campaignGroups',
-    'type','linkedStoreIds','linkedStoreIntegrationIds','targetedAudienceIds','contextId','evaluationGroupId'];
+    'type','linkedStoreIds','linkedStoreIntegrationIds','targetedAudienceIds','contextId'];
   var body = {};
   allowed.forEach(function(k) { if (srcCampaign[k] !== undefined) body[k] = srcCampaign[k]; });
-  body.state = 'disabled';
+  body.state = 'disabled'; // have to copy has disabled because rules don't exist yet. 
+
+  // --- Fetch Evaluation Group ID from our map ---
+  var sourceGroupId = S.groupMap[c.id]; 
+
+  if (sourceGroupId) {
+    if (S.groupMap && S.groupMap[sourceGroupId]) {
+      // Replace with the mapped destination ID
+      body.evaluationGroupId = S.groupMap[sourceGroupId];
+      log('  → Evaluation Group ID mapped: Src ' + sourceGroupId + ' -> Dst ' + body.evaluationGroupId, 'info');
+    } else {
+      log('  ⚠ Source group ' + sourceGroupId + ' not mapped, skipping evaluationGroupId', 'warn');
+    }
+  } else {
+    log('  ⚠ Campaign not found in any source evaluation group', 'warn');
+  }
+  // ----------------------------------------------
 
   var newCampaign = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns', {
     method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(body)
   });
   log('  → Campaign created (ID: ' + newCampaign.id + ')', 'info');
+
+  var newRulesetId = null; // <-- Variable to hold the new ruleset ID
 
   if (srcRuleset) {
     try { await copyCustomAttributes(srcRuleset, dstAppId); } catch(e) { log('  ⚠ Attribute copy issue: ' + e.message, 'warn'); }
@@ -1574,10 +1659,14 @@ async function copyCampaign(c, dstAppId) {
     ['id', 'campaignId', 'created', 'userId'].forEach(function(k) { delete rb[k]; });
     rb.activate = true;
     if (S.loyaltyMapping && Object.keys(S.loyaltyMapping).length > 0) rb = mapLoyaltyIdsInRuleset(rb, S.loyaltyMapping);
-    await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + newCampaign.id + '/rulesets', {
+    
+    // <-- Capture the response from the ruleset creation
+    var createdRuleset = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + newCampaign.id + '/rulesets', {
       method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(rb)
     });
-    log('  → Ruleset created', 'info');
+    newRulesetId = createdRuleset.id; // <-- Save the ID
+    
+    log('  → Ruleset created (ID: ' + newRulesetId + ')', 'info');
   }
 
   for (var i = 0; i < srcCollections.length; i++) {
@@ -1597,6 +1686,23 @@ async function copyCampaign(c, dstAppId) {
   }
 
   try { await copyCoupons(srcAppId, c.id, dstAppId, newCampaign.id); } catch(e) { log('  ⚠ Coupon copy issue: ' + e.message, 'warn'); }
+
+  // Restore the 'enabled' state if the original was enabled
+  if (srcCampaign.state === 'enabled') {
+    try {      
+      body.state = 'enabled'; 
+      body.activeRulesetId = newRulesetId; // <-- Assign the ruleset, required to enabled a campaign
+
+      await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + newCampaign.id, {
+        method: 'PUT', 
+        headers: bearerHeaders('dst'), 
+        body: JSON.stringify(body)
+      });
+      log('  → Campaign activated (enabled)', 'success');
+    } catch(e) { 
+      log('  ⚠ Could not enable campaign: ' + e.message, 'warn'); 
+    }
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -1707,28 +1813,184 @@ async function confirmDeleteAll() {
   await deleteAllDstCampaigns();
 }
 
+// ════════════════════════════════════════════════
+//  DELETE ALL (Campaigns & Evaluation Groups)
+// ════════════════════════════════════════════════
 async function deleteAllDstCampaigns() {
   var dstAppId = S.dst.selectedApp.id;
   var btn = document.getElementById('deleteBtn');
   btn.disabled = true;
   btn.textContent = 'Deleting…';
   log('Deleting all campaigns in "' + S.dst.selectedApp.name + '"…', 'warn');
+
+  // 1. DELETE CAMPAIGNS
   try {
     var data = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns', { headers: bearerHeaders('dst') });
     var campaigns = data.data || [];
-    if (!campaigns.length) { log('No campaigns found — nothing to delete.', 'info'); btn.disabled = false; btn.innerHTML = '🗑 Delete All in Dest.'; return; }
-    var deleted = 0, failed = 0;
-    for (var i = 0; i < campaigns.length; i++) {
-      var c = campaigns[i];
-      try {
-        await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + c.id, { method: 'DELETE', headers: bearerHeaders('dst') });
-        log('  🗑 Deleted "' + c.name + '"', 'warn'); deleted++;
-      } catch(e) { log('  ✗ Failed to delete "' + c.name + '": ' + e.message, 'error'); failed++; }
+    
+    if (!campaigns.length) { 
+      log('No campaigns found — skipping campaign deletion.', 'info'); 
+    } else {
+      var deleted = 0, failed = 0;
+      for (var i = 0; i < campaigns.length; i++) {
+        var c = campaigns[i];
+        try {
+          await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + c.id, { method: 'DELETE', headers: bearerHeaders('dst') });
+          log('  🗑 Deleted campaign "' + c.name + '"', 'warn'); 
+          deleted++;
+        } catch(e) { 
+          log('  ✗ Failed to delete campaign "' + c.name + '": ' + e.message, 'error'); 
+          failed++; 
+        }
+      }
+      log('Campaign delete complete — ' + deleted + ' deleted, ' + failed + ' failed.', failed > 0 ? 'error' : 'success');
     }
-    log('Delete complete — ' + deleted + ' deleted, ' + failed + ' failed.', failed > 0 ? 'error' : 'success');
-  } catch(e) { log('Failed to fetch destination campaigns: ' + e.message, 'error'); }
+  } catch(e) { 
+    log('Failed to fetch destination campaigns: ' + e.message, 'error'); 
+  }
+
+  // 2. DELETE EVALUATION GROUPS (Bottom-Up)
+  log('Checking for custom evaluation groups to delete…', 'info');
+  try {
+    var setRes = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaign_set', { headers: bearerHeaders('dst') });
+    var rootNode = setRes.set;
+    var rootGroupId = rootNode.groupId;
+    var currentDstVersion = setRes.version; // Track the version for the delete endpoint
+    var groupsToDelete = [];
+
+    // Post-order traversal: collect deepest children first, then parents
+    function collectGroups(node) {
+      if (node.type === 'SET' && node.elements) {
+        for (var i = 0; i < node.elements.length; i++) {
+          collectGroups(node.elements[i]);
+        }
+      }
+      // Only push if it's a SET and NOT the built-in Root group
+      if (node.type === 'SET' && node.groupId !== rootGroupId) {
+        groupsToDelete.push(node.groupId);
+      }
+    }
+    
+    collectGroups(rootNode);
+
+    if (!groupsToDelete.length) {
+      log('No custom evaluation groups found — nothing to delete.', 'info');
+    } else {
+      var gDeleted = 0, gFailed = 0;
+      for (var j = 0; j < groupsToDelete.length; j++) {
+        var gid = groupsToDelete[j];
+        try {
+          // Use the correct endpoint with the tracked version
+          await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaign_set/' + currentDstVersion + '/groups/' + gid, { 
+            method: 'DELETE', 
+            headers: bearerHeaders('dst') 
+          });
+          log('  🗑 Deleted evaluation group (ID: ' + gid + ')', 'warn'); 
+          gDeleted++;
+
+          // Fetch the updated campaign set to get the new version for the next deletion
+          var updatedSet = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaign_set', { headers: bearerHeaders('dst') });
+          currentDstVersion = updatedSet.version;
+
+        } catch(e) { 
+          log('  ✗ Failed to delete group (ID: ' + gid + '): ' + e.message, 'error'); 
+          gFailed++; 
+        }
+      }
+      log('Evaluation group delete complete — ' + gDeleted + ' deleted, ' + gFailed + ' failed.', gFailed > 0 ? 'error' : 'success');
+    }
+  } catch(e) { 
+    log('Failed to fetch or delete evaluation groups: ' + e.message, 'error'); 
+  }
+
+  // Reset button state
   btn.disabled = false;
   btn.innerHTML = '🗑 Delete All in Dest.';
+}
+
+
+
+// ════════════════════════════════════════════════
+//  COPY EVALUATION GROUPS
+// ════════════════════════════════════════════════
+async function copyEvaluationGroups(srcAppId, dstAppId) {
+  log('Fetching source evaluation tree...', 'info');
+  var srcData = await apiFetch(baseUrl('src') + '/v1/applications/' + srcAppId + '/campaign_set', { headers: bearerHeaders('src') });
+  var dstData = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaign_set', { headers: bearerHeaders('dst') });
+
+  var srcRoot = srcData.set;
+  var dstRoot = dstData.set;
+  var currentDstVersion = dstData.version; // Track the destination version
+
+  // 1. Map the Root Group (it already exists in both, we just need the IDs)
+  S.groupMap[srcRoot.groupId] = dstRoot.groupId;
+  log('  → Mapped Root Group: ' + srcRoot.groupId + ' → ' + dstRoot.groupId, 'info');
+
+  // 2. Recursive function to create child groups top-down
+  async function createGroups(node, parentId) {
+    if (!node.elements || node.elements.length === 0) return;
+
+    for (var i = 0; i < node.elements.length; i++) {
+      var child = node.elements[i];
+      if (child.type === 'SET') {
+        var body = {
+          name: child.name,
+          parentId: parentId,
+          evaluationMode: child.evaluationMode || 'stackable',
+          evaluationScope: child.evaluationScope || 'session',
+          locked: child.locked || false,
+          description: child.description || ''
+        };
+
+        try {
+          // Use the correct endpoint with the current version tracked in the loop
+          var newGroup = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaign_set/' + currentDstVersion + '/groups', {
+            method: 'POST',
+            headers: bearerHeaders('dst'),
+            body: JSON.stringify(body)
+          });
+          
+          // Save the ID mapping so campaigns know where to go
+          S.groupMap[child.groupId] = newGroup.id;
+          log('  → Created Group "' + child.name + '" (Mapped ' + child.groupId + ' → ' + newGroup.id + ')', 'info');
+
+          // Mutating the tree usually increments the version.
+          // Fetch the latest campaign set to get the new version for the next API call.
+          var updatedSet = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaign_set', { headers: bearerHeaders('dst') });
+          currentDstVersion = updatedSet.version;
+
+          // Recurse deeper for nested sets
+          await createGroups(child, newGroup.id);
+        } catch(e) {
+          log('  ⚠ Failed to create group "' + child.name + '": ' + e.message, 'warn');
+        }
+      }
+    }
+  }
+
+  // Start the build using the destination's root group ID as the starting parent
+  await createGroups(srcRoot, dstRoot.groupId);
+}
+
+// ════════════════════════════════════════════════
+//  EVALUATION GROUP MAPPING HELPER
+// ════════════════════════════════════════════════
+function buildCampaignGroupMap(node, currentGroupId, map) {
+  if (!node) return;
+
+  // If it's a SET, grab its groupId and process its children
+  if (node.type === 'SET') {
+    var groupId = node.groupId || currentGroupId; 
+    if (node.elements && Array.isArray(node.elements)) {
+      node.elements.forEach(function(child) {
+        buildCampaignGroupMap(child, groupId, map);
+      });
+    }
+  } 
+  // If it's a CAMPAIGN, map its ID to the parent's groupId
+  else if (node.type === 'CAMPAIGN' && node.campaignId) {
+    map[node.campaignId] = currentGroupId;
+  }
 }
 
 // ════════════════════════════════════════════════
