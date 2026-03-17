@@ -1603,11 +1603,6 @@ async function runCopy() {
     log('Sessions destroyed.', 'info');
   }
 }
-
-
-// ════════════════════════════════════════════════
-//  COPY SINGLE CAMPAIGN (from original)
-// ════════════════════════════════════════════════
 async function copyCampaign(c, dstAppId) {
   var srcAppId = S.src.selectedApp.id;
   var srcCampaign = await apiFetch(baseUrl('src') + '/v1/applications/' + srcAppId + '/campaigns/' + c.id, { headers: bearerHeaders('src') });
@@ -1628,14 +1623,12 @@ async function copyCampaign(c, dstAppId) {
     'type','linkedStoreIds','linkedStoreIntegrationIds','targetedAudienceIds','contextId'];
   var body = {};
   allowed.forEach(function(k) { if (srcCampaign[k] !== undefined) body[k] = srcCampaign[k]; });
-  body.state = 'disabled'; // have to copy has disabled because rules don't exist yet. 
+  body.state = 'disabled'; 
 
-  // --- Fetch Evaluation Group ID from our map ---
   var sourceGroupId = S.groupMap[c.id]; 
 
   if (sourceGroupId) {
     if (S.groupMap && S.groupMap[sourceGroupId]) {
-      // Replace with the mapped destination ID
       body.evaluationGroupId = S.groupMap[sourceGroupId];
       log('  → Evaluation Group ID mapped: Src ' + sourceGroupId + ' -> Dst ' + body.evaluationGroupId, 'info');
     } else {
@@ -1644,27 +1637,30 @@ async function copyCampaign(c, dstAppId) {
   } else {
     log('  ⚠ Campaign not found in any source evaluation group', 'warn');
   }
-  // ----------------------------------------------
 
   var newCampaign = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns', {
     method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(body)
   });
   log('  → Campaign created (ID: ' + newCampaign.id + ')', 'info');
 
-  var newRulesetId = null; // <-- Variable to hold the new ruleset ID
+  var newRulesetId = null;
 
   if (srcRuleset) {
     try { await copyCustomAttributes(srcRuleset, dstAppId); } catch(e) { log('  ⚠ Attribute copy issue: ' + e.message, 'warn'); }
     var rb = Object.assign({}, srcRuleset);
     ['id', 'campaignId', 'created', 'userId'].forEach(function(k) { delete rb[k]; });
     rb.activate = true;
+    
+    // -------- Filter out Custom Effects ---
+    rb = filterCustomEffects(rb);
+    // --------------------------------------
+
     if (S.loyaltyMapping && Object.keys(S.loyaltyMapping).length > 0) rb = mapLoyaltyIdsInRuleset(rb, S.loyaltyMapping);
     
-    // <-- Capture the response from the ruleset creation
     var createdRuleset = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + newCampaign.id + '/rulesets', {
       method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(rb)
     });
-    newRulesetId = createdRuleset.id; // <-- Save the ID
+    newRulesetId = createdRuleset.id; 
     
     log('  → Ruleset created (ID: ' + newRulesetId + ')', 'info');
   }
@@ -1687,11 +1683,10 @@ async function copyCampaign(c, dstAppId) {
 
   try { await copyCoupons(srcAppId, c.id, dstAppId, newCampaign.id); } catch(e) { log('  ⚠ Coupon copy issue: ' + e.message, 'warn'); }
 
-  // Restore the 'enabled' state if the original was enabled
   if (srcCampaign.state === 'enabled') {
     try {      
       body.state = 'enabled'; 
-      body.activeRulesetId = newRulesetId; // <-- Assign the ruleset, required to enabled a campaign
+      body.activeRulesetId = newRulesetId; 
 
       await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + newCampaign.id, {
         method: 'PUT', 
@@ -1703,6 +1698,36 @@ async function copyCampaign(c, dstAppId) {
       log('  ⚠ Could not enable campaign: ' + e.message, 'warn'); 
     }
   }
+}
+
+// ════════════════════════════════════════════════
+//  CUSTOM EFFECT FILTER HELPER
+// ════════════════════════════════════════════════
+function filterCustomEffects(ruleset) {
+  if (!ruleset.rules || !Array.isArray(ruleset.rules)) return ruleset;
+
+  ruleset.rules.forEach(function(rule) {
+    if (rule.effects && Array.isArray(rule.effects)) {
+      var originalCount = rule.effects.length;
+      
+      rule.effects = rule.effects.filter(function(effect) {
+        // Standard Talon effects are wrapped in a catch: ["catch", [fallback], [expression]]
+        // Custom effects expressions start with the "!" operator
+        var expression = effect[2];
+        if (Array.isArray(expression) && expression[0] === "!") {
+          return false; // Remove this effect
+        }
+        return true;
+      });
+
+      var removedCount = originalCount - rule.effects.length;
+      if (removedCount > 0) {
+        log('  → Removed ' + removedCount + ' custom effect(s) from rule: ' + rule.name, 'warn');
+      }
+    }
+  });
+
+  return ruleset;
 }
 
 // ════════════════════════════════════════════════
