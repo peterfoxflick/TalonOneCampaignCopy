@@ -1,37 +1,56 @@
-This is a copying tool to copy campaigns across different deployments. 
+# Talon.One Campaign Copier
 
-Here is a summary of everything the script can currently copy and synchronize from a source application to a destination application:
+🚀 **[Try it live here!](https://peterfoxflick.github.io/TalonOneCampaignCopy/)**
 
-1. Core Campaign Data & Rules
-Campaign Metadata & Settings: Copies standard fields including name (appending " copy 02"), state, tags, limits, features, description, startTime, endTime, type, attributes, reevaluateOnReturn, couponSettings, referralSettings, and campaignGroups.
+A robust, browser-based utility designed to seamlessly duplicate [Talon.One](https://talon.one/) campaigns across different applications or entirely different deployments (e.g., Sandbox to Production). 
 
-Targeting & Stores: Copies linkedStoreIds, linkedStoreIntegrationIds, targetedAudienceIds, and contextId.
+This tool goes beyond simple superficial duplication. It acts as a deep-crawling dependency manager, parsing the Abstract Syntax Tree (AST) of your rulesets to ensure that all required attributes, custom effects, webhooks, and achievements are properly recreated, linked, and mapped in the destination environment.
 
-Active Rulesets: Copies the full active ruleset (conditions, effects, and bindings), automatically activating it in the destination.
+## 🌟 Key Features & Capabilities
 
-2. Application & Deployment-Level Dependencies (Smart Sync)
-The script parses the ruleset's Abstract Syntax Tree (AST) to find required dependencies. If copying to the same deployment, it securely links the destination app to existing entities. If crossing deployments, it recreates them:
+### 1. Core Campaign Data & Rules
+* **Campaign Metadata:** Copies standard fields including name (appends " copy 02" to prevent naming collisions), state, tags, limits, features, description, start/end times, and evaluation settings.
+* **Targeting & Stores:** Carries over linked stores, integrations, target audiences, and contexts.
+* **Active Rulesets:** Copies the full active ruleset (conditions, effects, and bindings) and automatically activates it in the destination.
 
-Custom Attributes: Automatically finds and recreates/links custom attributes used in the campaign or ruleset across multiple entities (CustomerProfile, CustomerSession, CartItem, Event, Campaign).
+### 2. Smart Dependency Syncing
+When migrating rules, the script parses the underlying JSON AST to find dependencies. If copying within the same deployment, it securely links the destination app to existing entities. If crossing deployments, it recreates them:
+* **Custom Attributes:** Automatically finds and recreates/links custom attributes used across multiple entities (`CustomerProfile`, `CustomerSession`, `CartItem`, `Event`, `Campaign`).
+* **Custom Effects:** Extracts custom effect names (`!`) and recreates/links them in the destination.
+* **Webhooks:** Extracts webhook IDs (`callApi###`), strips deployment-specific authentication credentials to prevent crashes, and recreates/links them. Includes a fallback toggle to safely transform webhooks into standard `notification` effects if the user opts out.
 
-Custom Effects: Parses the ruleset for the ! operator, extracts custom effect names, and recreates/links them in the destination.
+### 3. Campaign-Level Assets
+* **Achievements:** Copies campaign-specific achievements (title, target, period, recurrence).
+* **Collections (Allowed Lists):** Automatically exports CSV data from the source collection and imports it directly into the newly created destination collection.
+* **Coupons:** Copies up to 100 associated coupons, preserving their exact patterns, usage/discount limits, and expiration dates.
 
-Webhooks: Finds callApi### effects. It safely drops the authenticationId (to prevent cross-deployment crashes) and recreates/links the webhook. It also features a fallback: if the user opts out of copying webhooks, it safely transforms them into standard notification effects in the destination ruleset.
-
-3. Campaign-Level Dependencies
-Achievements: Copies campaign-specific achievements (including title, target, period, and recurrence policies).
-
-Collections (Allowed Lists): Recreates campaign collections and actually exports the CSV data from the source and imports it into the destination.
-
-Coupons: Copies up to 100 associated coupons, preserving their exact patterns, usage limits, discount limits, and expiration dates.
-
-4. Structure & ID Mapping
+### 4. Structural ID Mapping
 Because copying creates new database IDs in the destination, the script handles the complex ID-swapping required to keep rules from breaking:
+* **Evaluation Groups (Folder Tree):** Can optionally recreate your exact Evaluation Group hierarchy (folders/trees), preserving `evaluationMode` (e.g., stackable) and `evaluationScope` (e.g., session), placing copied campaigns into their correct folders.
+* **AST ID Swapping:** Automatically swaps old webhook and achievement IDs inside the ruleset payload with the newly generated destination IDs.
+* **Loyalty Program Mapping:** Includes a UI step to dynamically map Source Loyalty Program IDs to Destination Loyalty Program IDs inside the rules.
 
-Evaluation Groups (Folder Tree): Can optionally recreate your exact Evaluation Group hierarchy (folders/trees), preserving evaluationMode (e.g., stackable) and evaluationScope (e.g., session), and places the copied campaigns into their correct folders.
+## 🛠 How to Use
 
-Webhook ID Mapping: Swaps the old webhook ID in the ruleset (e.g., callApi189) with the newly generated destination ID (e.g., callApi452).
+The tool operates in a simple 7-step wizard:
 
-Achievement ID Mapping: Swaps the old achievement IDs with the newly generated ones so rules like updateAchievementProgress continue to work.
+1. **Source Login:** Enter the subdomain, email, and password of the deployment you want to copy *from*.
+2. **Source Application:** Select the specific application containing the campaigns.
+3. **Destination Login:** Enter the credentials for the deployment you want to copy *into*.
+4. **Destination Application:** Select the target application. *(Includes a "Danger Zone" option to wipe the destination application clean before copying).*
+5. **Loyalty Mapping:** Match any loyalty programs from the source to their equivalents in the destination.
+6. **Scope:** Choose to copy All Campaigns, Active Only, or a Single Campaign. You can also configure Evaluation Group logic and Webhook preferences here.
+7. **Review & Copy:** Double-check your mappings and initiate the copy process. A progress bar and detailed activity log will track the migration in real-time.
 
-Loyalty Program Mapping: Takes user input from the UI (Step 5) to dynamically swap Source Loyalty Program IDs with Destination Loyalty Program IDs inside the ruleset.
+## 🔒 Security & Privacy
+
+This application is built entirely in a single HTML/JS file. **It has no backend server.** All API requests are made directly from your browser to the Talon.One Management API. Your credentials, tokens, and campaign data are never stored, tracked, or sent to any third-party servers. 
+
+## 💻 Local Development
+
+Because it is a single file without external build dependencies, running it locally is as easy as cloning the repo and opening the file in your browser:
+
+```bash
+git clone [https://github.com/peterfoxflick/TalonOneCampaignCopy.git](https://github.com/peterfoxflick/TalonOneCampaignCopy.git)
+cd TalonOneCampaignCopy
+open index.html
