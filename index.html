@@ -983,7 +983,16 @@ select option { background: #fff; }
           <option value="">— select a campaign —</option>
         </select>
       </div>
-
+      
+      <div id="webhookSection" class="field hidden" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">
+        <label>Cross-Deployment Webhooks</label>
+        <div class="card-hint" style="margin-bottom: 12px;">You are copying to a different deployment. Would you like to copy webhooks?</div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="checkbox" id="copyWebhooksToggle" checked onchange="S.copyWebhooks = this.checked;" style="width: auto; cursor: pointer;">
+          <label for="copyWebhooksToggle" style="text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text);">Copy webhooks (If unchecked, they will be safely converted to notification effects)</label>
+        </div>
+      </div>
+      
       <div class="field" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">
         <label>Evaluation Settings</label>
         <div class="card-hint" style="margin-bottom: 12px;">Determine how campaigns are organized for evaluation.</div>
@@ -1070,12 +1079,13 @@ select option { background: #fff; }
 //  STATE
 // ════════════════════════════════════════════════
 const S = {
-  src: { subdomain:'', token:'', connected:false, apps:[], selectedApp:null, campaigns:[], loyaltyPrograms:[] },
-  dst: { subdomain:'', token:'', connected:false, apps:[], selectedApp:null, loyaltyPrograms:[] },
+  src: { subdomain:'', token:'', connected:false, apps:[], selectedApp:null, campaigns:[], loyaltyPrograms:[], allAttributes: null, allCustomEffects: null, allWebhooks: null },
+  dst: { subdomain:'', token:'', connected:false, apps:[], selectedApp:null, loyaltyPrograms:[], allAttributes: null, allCustomEffects: null, allWebhooks: null },
   mode: null,
   loyaltyMapping: {},
   currentStep: 1,
   copyEvalTree: false,
+  copyWebhooks: false, 
   groupMap: {}
 };
 
@@ -1433,6 +1443,10 @@ function renderScopeStep() {
     picker.appendChild(o);
   });
 
+  // Show Webhook toggle ONLY if cross-deployment
+  var isSameDeployment = (S.src.subdomain.toLowerCase() === S.dst.subdomain.toLowerCase());
+  document.getElementById('webhookSection').classList.toggle('hidden', isSameDeployment);
+
   if (S.mode) setMode(S.mode);
 }
 
@@ -1638,6 +1652,8 @@ async function copyCampaign(c, dstAppId) {
     log('  ⚠ Campaign not found in any source evaluation group', 'warn');
   }
 
+  //body.name = body.name + " copy 02"
+
   var newCampaign = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns', {
     method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(body)
   });
@@ -1645,17 +1661,46 @@ async function copyCampaign(c, dstAppId) {
 
   var newRulesetId = null;
 
+  // 1. Sync Application/Deployment level dependencies
+  try { 
+    await syncCampaignAttributes(c, srcRuleset, dstAppId); 
+  } catch(e) { log('  ⚠ Attribute sync issue: ' + e.message, 'warn'); }
+
+  try { 
+    await syncCampaignCustomEffects(srcRuleset, dstAppId); 
+  } catch(e) { log('  ⚠ Custom Effect sync issue: ' + e.message, 'warn'); }
+
+  var webhookMap = {};
+  try { 
+    webhookMap = await syncCampaignWebhooks(srcRuleset, dstAppId); 
+  } catch(e) { log('  ⚠ Webhook sync issue: ' + e.message, 'warn'); }
+
+  // 2. Sync Campaign level dependencies
+  var achievementMap = {};
+  try {
+    achievementMap = await syncCampaignAchievements(srcAppId, c.id, dstAppId, newCampaign.id);
+  } catch(e) { log('  ⚠ Achievement sync issue: ' + e.message, 'warn'); }
+
+  // 3. Process and save the Ruleset
   if (srcRuleset) {
-    try { await copyCustomAttributes(srcRuleset, dstAppId); } catch(e) { log('  ⚠ Attribute copy issue: ' + e.message, 'warn'); }
     var rb = Object.assign({}, srcRuleset);
     ['id', 'campaignId', 'created', 'userId'].forEach(function(k) { delete rb[k]; });
     rb.activate = true;
     
-    // -------- Filter out Custom Effects ---
-    rb = filterCustomEffects(rb);
-    // --------------------------------------
+    // Map Loyalty IDs
+    if (S.loyaltyMapping && Object.keys(S.loyaltyMapping).length > 0) {
+      rb = mapLoyaltyIdsInRuleset(rb, S.loyaltyMapping);
+    }
 
-    if (S.loyaltyMapping && Object.keys(S.loyaltyMapping).length > 0) rb = mapLoyaltyIdsInRuleset(rb, S.loyaltyMapping);
+    // Map new Achievement IDs
+    if (Object.keys(achievementMap).length > 0) {
+      rb = mapAchievementIdsInRuleset(rb, achievementMap);
+    }
+
+    // Map new Webhook IDs (or convert to notifications)
+    var isSameDeployment = (S.src.subdomain.toLowerCase() === S.dst.subdomain.toLowerCase());
+    var shouldCopyWebhooks = isSameDeployment || S.copyWebhooks;
+    rb = mapWebhooksInRuleset(rb, webhookMap, shouldCopyWebhooks);
     
     var createdRuleset = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + newCampaign.id + '/rulesets', {
       method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(rb)
@@ -1731,52 +1776,155 @@ function filterCustomEffects(ruleset) {
 }
 
 // ════════════════════════════════════════════════
-//  CUSTOM ATTRIBUTES (from original)
+//  SMART CUSTOM ATTRIBUTES SYNCHRONIZATION
 // ════════════════════════════════════════════════
 function extractAttributes(arr, out) {
   for (var i = 0; i < arr.length; i++) {
     var a = arr[i];
     if (a === 'Attributes') {
-      var map = { Profile:'CustomerProfile', Session:'CustomerSession', Item:'CartItem' };
+      // Added Event and Campaign to the mapping radar
+      var map = { Profile:'CustomerProfile', Session:'CustomerSession', Item:'CartItem', Event:'Event', Campaign:'Campaign' };
       out.push({ entity: map[arr[i-1]] || arr[i-1], name: arr[i+1] });
-    } else if (Array.isArray(a)) { extractAttributes(a, out); }
+    } else if (Array.isArray(a)) { 
+      extractAttributes(a, out); 
+    }
+  }
+}
+// ════════════════════════════════════════════════
+//  SMART CUSTOM ATTRIBUTES SYNCHRONIZATION
+// ════════════════════════════════════════════════
+function extractAttributes(arr, out) {
+  for (var i = 0; i < arr.length; i++) {
+    var a = arr[i];
+    if (a === 'Attributes') {
+      // Added Event and Campaign to the mapping radar
+      var map = { Profile:'CustomerProfile', Session:'CustomerSession', Item:'CartItem', Event:'Event', Campaign:'Campaign' };
+      out.push({ entity: map[arr[i-1]] || arr[i-1], name: arr[i+1] });
+    } else if (Array.isArray(a)) { 
+      extractAttributes(a, out); 
+    }
   }
 }
 
-async function copyCustomAttributes(ruleset, dstAppId) {
+async function syncCampaignAttributes(campaign, ruleset, dstAppId) {
   var needed = [];
-  (ruleset.rules || []).forEach(function(r) {
-    extractAttributes(r.condition || [], needed);
-    extractAttributes(r.effects || [], needed);
+
+  // 1. Extract from Ruleset conditions, effects, and bindings
+  if (ruleset) {
+    (ruleset.rules || []).forEach(function(r) {
+      extractAttributes(r.condition || [], needed);
+      extractAttributes(r.effects || [], needed);
+    });
+    (ruleset.bindings || []).forEach(function(b) { 
+      extractAttributes(b.expression || [], needed); 
+    });
+  }
+
+  // 2. Extract from Campaign level
+  if (campaign.attributes) {
+    Object.keys(campaign.attributes).forEach(function(key) {
+      needed.push({ entity: 'Campaign', name: key });
+    });
+  }
+
+  // Deduplicate
+  var uniqueNeeded = [];
+  var seen = new Set();
+  needed.forEach(function(n) {
+    var key = n.entity + '|' + n.name;
+    if (!seen.has(key)) { seen.add(key); uniqueNeeded.push(n); }
   });
-  (ruleset.bindings || []).forEach(function(b) { extractAttributes(b.expression || [], needed); });
-  if (!needed.length) return;
-  var results = await Promise.all([
-    apiFetch(baseUrl('dst') + '/v1/attributes', { headers: bearerHeaders('dst') }),
-    apiFetch(baseUrl('src') + '/v1/attributes', { headers: bearerHeaders('src') })
-  ]);
-  var existing = results[0].data || [];
-  var srcAll   = results[1].data || [];
-  for (var i = 0; i < needed.length; i++) {
-    var n = needed[i];
-    var found = existing.find(function(e) { return e.name === n.name && e.entity === n.entity; });
-    if (found) {
-      if (found.subscribedApplicationsIds && found.subscribedApplicationsIds.length && !found.subscribedApplicationsIds.includes(dstAppId)) {
-        var upd = Object.assign({}, found);
-        ['id','created','accountId'].forEach(function(k) { delete upd[k]; });
-        upd.subscribedApplicationsIds = found.subscribedApplicationsIds.concat([dstAppId]);
-        await apiFetch(baseUrl('dst') + '/v1/attributes/' + found.id, { method: 'PUT', headers: bearerHeaders('dst'), body: JSON.stringify(upd) });
+
+  if (!uniqueNeeded.length) return;
+
+  // 3. Check if we are copying within the exact same deployment
+  var isSameDeployment = (S.src.subdomain.toLowerCase() === S.dst.subdomain.toLowerCase());
+
+  // 4. Fetch attributes and cache them (respecting rate limits)
+  if (!S.src.allAttributes) {
+    var srcAttrRes = await apiFetch(baseUrl('src') + '/v1/attributes?pageSize=1000', { headers: bearerHeaders('src') });
+    S.src.allAttributes = srcAttrRes.data || [];
+  }
+
+  // If same deployment, share the cache. Otherwise, fetch destination attributes.
+  if (isSameDeployment) {
+    S.dst.allAttributes = S.src.allAttributes;
+  } else if (!S.dst.allAttributes) {
+    var dstAttrRes = await apiFetch(baseUrl('dst') + '/v1/attributes?pageSize=1000', { headers: bearerHeaders('dst') });
+    S.dst.allAttributes = dstAttrRes.data || [];
+  }
+
+  var existingDst = S.dst.allAttributes;
+  var allSrc = S.src.allAttributes;
+
+  // 5. Map, Update, or Create
+  for (var i = 0; i < uniqueNeeded.length; i++) {
+    var n = uniqueNeeded[i];
+    
+    // Look for the attribute in the destination environment
+    var foundDst = existingDst.find(function(e) { return e.name === n.name && e.entity === n.entity; });
+
+    if (foundDst) {
+      // SCENARIO A: Attribute exists (Always true if same deployment)
+      var currentApps = foundDst.subscribedApplicationsIds || [];
+      
+      if (!currentApps.includes(dstAppId)) {
+        var upd = Object.assign({}, foundDst);
+        
+        // Strip out read-only fields AND eventTypeId before sending the PUT request
+        ['id', 'created', 'accountId', 'eventTypeId'].forEach(function(k) { delete upd[k]; });
+        if (upd.entity !== 'Event') delete upd.eventType;
+        
+        // Add the new application ID to the subscription array
+        upd.subscribedApplicationsIds = currentApps.concat([dstAppId]);
+        
+        var putUrl = baseUrl('dst') + '/v1/attributes/' + foundDst.id;
+        try {
+          await apiFetch(putUrl, { 
+            method: 'PUT', headers: bearerHeaders('dst'), body: JSON.stringify(upd) 
+          });
+          log('  → Updated existing attribute "' + n.name + '" to include destination app', 'info');
+          foundDst.subscribedApplicationsIds.push(dstAppId); // Update local cache
+        } catch (err) {
+          console.error('--- ATTRIBUTE PUT FAILED ---');
+          console.error('URL:', putUrl);
+          console.error('Payload:', upd);
+          console.error('Error:', err.message);
+          log('  ⚠ Failed to update attribute "' + n.name + '": ' + err.message, 'error');
+        }
       }
+      
     } else {
-      var srcDef = srcAll.find(function(e) { return e.name === n.name && e.entity === n.entity; });
+      // SCENARIO B: Attribute does not exist (Only happens across different deployments)
+      var srcDef = allSrc.find(function(e) { return e.name === n.name && e.entity === n.entity; });
       if (srcDef) {
         var b = Object.assign({}, srcDef);
-        ['id','created','accountId'].forEach(function(k) { delete b[k]; });
-        if (b.entity !== 'Entity') delete b.eventType;
+        
+        // Strip out read-only fields AND eventTypeId
+        ['id', 'created', 'accountId', 'eventTypeId'].forEach(function(k) { delete b[k]; });
+        
+        // Clean up entity-specific payload rules
+        if (b.entity !== 'Event') delete b.eventType;
         if (b.entity === 'CartItem') b.allowedSubscriptions = ['application'];
+        
         b.subscribedApplicationsIds = [dstAppId];
-        await apiFetch(baseUrl('dst') + '/v1/attributes', { method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(b) });
-        log('  → Attribute "' + n.name + '" created', 'info');
+
+        var postUrl = baseUrl('dst') + '/v1/attributes';
+        try {
+          var newAttr = await apiFetch(postUrl, { 
+            method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(b) 
+          });
+          log('  → Created new attribute "' + n.name + '" in destination', 'info');
+          existingDst.push(newAttr); // Update local cache
+        } catch (err) {
+          console.error('--- ATTRIBUTE POST FAILED ---');
+          console.error('URL:', postUrl);
+          console.error('Payload:', b);
+          console.error('Error:', err.message);
+          log('  ⚠ Failed to create attribute "' + n.name + '": ' + err.message, 'error');
+        }
+      } else {
+        log('  ⚠ Attribute "' + n.name + '" is used in campaign but missing from source catalog.', 'warn');
       }
     }
   }
@@ -1803,6 +1951,337 @@ function mapLoyaltyIdsInRuleset(node, mapping) {
   }
   return node;
 }
+// ════════════════════════════════════════════════
+//  SMART CUSTOM EFFECTS SYNCHRONIZATION
+// ════════════════════════════════════════════════
+const webhookRegex = /^callApi(\d+)$/;
+
+function extractCustomEffects(arr, out) {
+  if (!Array.isArray(arr)) return;
+  
+  if (arr.length > 1 && arr[0] === '!') {
+    var effectName = arr[1];
+    // CRITICAL FIX: Ignore webhooks so they don't get mixed up with Custom Effects!
+    if (typeof effectName === 'string' && !webhookRegex.test(effectName)) {
+      if (!out.includes(effectName)) {
+        out.push(effectName);
+      }
+    }
+  }
+  
+  for (var i = 0; i < arr.length; i++) {
+    if (Array.isArray(arr[i])) {
+      extractCustomEffects(arr[i], out);
+    }
+  }
+}
+
+async function syncCampaignCustomEffects(ruleset, dstAppId) {
+  if (!ruleset || !ruleset.rules) return;
+  
+  var needed = [];
+  ruleset.rules.forEach(function(r) {
+    if (r.effects) extractCustomEffects(r.effects, needed);
+  });
+  
+  if (!needed.length) return;
+
+  var isSameDeployment = (S.src.subdomain.toLowerCase() === S.dst.subdomain.toLowerCase());
+
+  // 1. Fetch source custom effects and cache them
+  if (!S.src.allCustomEffects) {
+    var srcRes = await apiFetch(baseUrl('src') + '/v1/custom_effects?pageSize=1000', { headers: bearerHeaders('src') });
+    S.src.allCustomEffects = srcRes.data || [];
+  }
+
+  // 2. Share cache if same deployment, else fetch destination custom effects
+  if (isSameDeployment) {
+    S.dst.allCustomEffects = S.src.allCustomEffects;
+  } else if (!S.dst.allCustomEffects) {
+    var dstRes = await apiFetch(baseUrl('dst') + '/v1/custom_effects?pageSize=1000', { headers: bearerHeaders('dst') });
+    S.dst.allCustomEffects = dstRes.data || [];
+  }
+
+  var existingDst = S.dst.allCustomEffects;
+  var allSrc = S.src.allCustomEffects;
+
+  // 3. Map, Update, or Create
+  for (var i = 0; i < needed.length; i++) {
+    var effectName = needed[i];
+    var foundDst = existingDst.find(function(e) { return e.name === effectName; });
+
+    if (foundDst) {
+      // SCENARIO A: Effect exists. Ensure destination app is subscribed.
+      var currentApps = foundDst.applicationIds || [];
+      if (!currentApps.includes(dstAppId)) {
+        var upd = Object.assign({}, foundDst);
+        
+        // Strip out read-only / system fields
+        ['id', 'created', 'accountId', 'modified', 'modifiedBy', 'createdBy'].forEach(function(k) { delete upd[k]; });
+        upd.applicationIds = currentApps.concat([dstAppId]);
+        
+        var putUrl = baseUrl('dst') + '/v1/custom_effects/' + foundDst.id;
+        try {
+          await apiFetch(putUrl, { 
+            method: 'PUT', headers: bearerHeaders('dst'), body: JSON.stringify(upd) 
+          });
+          log('  → Updated existing custom effect "' + effectName + '" to include destination app', 'info');
+          foundDst.applicationIds.push(dstAppId); // update local cache
+        } catch (err) {
+          console.error('--- CUSTOM EFFECT PUT FAILED ---');
+          console.error('URL:', putUrl);
+          console.error('Payload:', upd);
+          console.error('Error:', err.message);
+          log('  ⚠ Failed to update custom effect "' + effectName + '": ' + err.message, 'error');
+        }
+      }
+    } else {
+      // SCENARIO B: Effect does not exist in destination deployment. Create it.
+      var srcDef = allSrc.find(function(e) { return e.name === effectName; });
+      if (srcDef) {
+        var b = Object.assign({}, srcDef);
+        
+        ['id', 'created', 'accountId', 'modified', 'modifiedBy', 'createdBy'].forEach(function(k) { delete b[k]; });
+        b.applicationIds = [dstAppId];
+
+        var postUrl = baseUrl('dst') + '/v1/custom_effects';
+        try {
+          var newEffect = await apiFetch(postUrl, { 
+            method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(b) 
+          });
+          log('  → Created new custom effect "' + effectName + '" in destination', 'info');
+          existingDst.push(newEffect); // update local cache
+        } catch (err) {
+          console.error('--- CUSTOM EFFECT POST FAILED ---');
+          console.error('URL:', postUrl);
+          console.error('Payload:', b);
+          console.error('Error:', err.message);
+          log('  ⚠ Failed to create custom effect "' + effectName + '": ' + err.message, 'error');
+        }
+      } else {
+        log('  ⚠ Custom effect "' + effectName + '" is used but missing from source catalog.', 'warn');
+      }
+    }
+  }
+}
+
+// ════════════════════════════════════════════════
+//  CAMPAIGN ACHIEVEMENTS SYNCHRONIZATION
+// ════════════════════════════════════════════════
+async function syncCampaignAchievements(srcAppId, srcCampaignId, dstAppId, dstCampaignId) {
+  var achievementMap = {}; // { oldId: newId }
+  
+  try {
+    var srcRes = await apiFetch(baseUrl('src') + '/v1/applications/' + srcAppId + '/campaigns/' + srcCampaignId + '/achievements', { headers: bearerHeaders('src') });
+    var achievements = srcRes.data || [];
+
+    if (!achievements.length) return achievementMap;
+    
+    log('  → Found ' + achievements.length + ' achievement(s). Copying...', 'info');
+
+    for (var i = 0; i < achievements.length; i++) {
+      var a = achievements[i];
+      var b = Object.assign({}, a);
+
+      // Strip read-only and system-generated properties
+      ['id', 'created', 'campaignId', 'userId', 'createdBy', 'hasProgress', 'status'].forEach(function(k) { delete b[k]; });
+
+      var postUrl = baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns/' + dstCampaignId + '/achievements';
+      try {
+        var newAch = await apiFetch(postUrl, { 
+          method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(b) 
+        });
+        log('  → Copied achievement "' + b.name + '"', 'info');
+        
+        // Save the mapping for the ruleset AST
+        achievementMap[a.id] = newAch.id;
+      } catch (err) {
+        console.error('--- ACHIEVEMENT POST FAILED ---');
+        console.error('URL:', postUrl);
+        console.error('Payload:', b);
+        console.error('Error:', err.message);
+        log('  ⚠ Failed to copy achievement "' + b.name + '": ' + err.message, 'error');
+      }
+    }
+  } catch (e) {
+    log('  ⚠ Could not fetch source achievements: ' + e.message, 'warn');
+  }
+  
+  return achievementMap;
+}
+
+// Helper to crawl the AST and swap out the old Achievement IDs for the new ones
+function mapAchievementIdsInRuleset(node, mapping) {
+  if (Array.isArray(node)) {
+    if (node.length > 0 && typeof node[0] === 'string') {
+      var fnName = node[0];
+      // Talon.One achievement effects (e.g., "addAchievementProgress") 
+      // typically pass the achievement ID as the first argument
+      if (fnName.toLowerCase().includes('achievement')) {
+         if (node.length > 1 && typeof node[1] === 'number') {
+            var oldId = node[1];
+            if (mapping[oldId]) {
+               node[1] = mapping[oldId];
+            }
+         }
+      }
+    }
+    for (var i = 0; i < node.length; i++) { 
+      node[i] = mapAchievementIdsInRuleset(node[i], mapping); 
+    }
+  } else if (node !== null && typeof node === 'object') {
+    for (var key in node) { 
+      if (Object.prototype.hasOwnProperty.call(node, key)) { 
+        node[key] = mapAchievementIdsInRuleset(node[key], mapping); 
+      } 
+    }
+  }
+  return node;
+}
+// ════════════════════════════════════════════════
+//  SMART WEBHOOK SYNCHRONIZATION (callApi + ID)
+// ════════════════════════════════════════════════
+function extractWebhooks(arr, out) {
+  if (!Array.isArray(arr)) return;
+  
+  if (arr.length > 1 && arr[0] === '!') {
+    var match = (typeof arr[1] === 'string') ? arr[1].match(webhookRegex) : null;
+    if (match) {
+      var id = parseInt(match[1], 10);
+      if (!out.includes(id)) out.push(id);
+    }
+  }
+  
+  for (var i = 0; i < arr.length; i++) {
+    if (Array.isArray(arr[i])) extractWebhooks(arr[i], out);
+  }
+}
+
+// Crawls the AST and swaps "callApi189" to "callApi452" (or a notification)
+function mapWebhooksInRuleset(node, mapping, shouldCopy) {
+  if (Array.isArray(node)) {
+    if (node.length > 1 && node[0] === '!') {
+      var match = (typeof node[1] === 'string') ? node[1].match(webhookRegex) : null;
+      if (match) {
+        var oldId = parseInt(match[1], 10);
+        
+        if (!shouldCopy) {
+          // Transform the whole [ "!", "callApi189", ... ] array into a safe notification
+          return ['notification', 'Webhook Skipped', { "body": "Cross-deployment webhook skipped. Original Source ID: " + oldId }];
+        } else if (mapping[oldId]) {
+          // Re-inject the new destination ID into the AST
+          node[1] = 'callApi' + mapping[oldId];
+        }
+      }
+    }
+    // Continue recursion for nested arrays
+    for (var i = 0; i < node.length; i++) {
+      node[i] = mapWebhooksInRuleset(node[i], mapping, shouldCopy);
+    }
+  } else if (node !== null && typeof node === 'object') {
+    for (var key in node) {
+      if (Object.prototype.hasOwnProperty.call(node, key)) {
+        node[key] = mapWebhooksInRuleset(node[key], mapping, shouldCopy);
+      }
+    }
+  }
+  return node;
+}
+
+async function syncCampaignWebhooks(ruleset, dstAppId) {
+  if (!ruleset || !ruleset.rules) return {};
+  
+  var neededIds = [];
+  ruleset.rules.forEach(function(r) {
+    if (r.effects) extractWebhooks(r.effects, neededIds);
+  });
+  
+  if (!neededIds.length) return {};
+
+  var isSameDeployment = (S.src.subdomain.toLowerCase() === S.dst.subdomain.toLowerCase());
+
+  // If cross-deployment and user opted out, skip API syncing. 
+  // We will swap them to notifications in the ruleset mapper later.
+  if (!isSameDeployment && !S.copyWebhooks) {
+    log('  → User opted out of cross-deployment webhooks. Will convert to notifications.', 'info');
+    return {}; 
+  }
+
+  // 1. Fetch and Cache
+  if (!S.src.allWebhooks) {
+    var srcRes = await apiFetch(baseUrl('src') + '/v1/webhooks?pageSize=1000', { headers: bearerHeaders('src') });
+    S.src.allWebhooks = srcRes.data || [];
+  }
+
+  if (isSameDeployment) {
+    S.dst.allWebhooks = S.src.allWebhooks;
+  } else if (!S.dst.allWebhooks) {
+    var dstRes = await apiFetch(baseUrl('dst') + '/v1/webhooks?pageSize=1000', { headers: bearerHeaders('dst') });
+    S.dst.allWebhooks = dstRes.data || [];
+  }
+
+  var existingDst = S.dst.allWebhooks;
+  var allSrc = S.src.allWebhooks;
+  
+  var webhookMap = {}; // { oldId: newId }
+
+  // 2. Map, Update, or Create
+  for (var i = 0; i < neededIds.length; i++) {
+    var oldId = neededIds[i];
+    var srcDef = allSrc.find(function(e) { return e.id === oldId; });
+
+    if (!srcDef) {
+      log('  ⚠ Webhook ID ' + oldId + ' is used in ruleset but missing from source catalog.', 'warn');
+      continue;
+    }
+
+    var whTitle = srcDef.title;
+    var foundDst = existingDst.find(function(e) { return e.title === whTitle; });
+
+    if (foundDst) {
+      // SCENARIO A: Webhook exists. Map it and ensure destination app is subscribed.
+      webhookMap[oldId] = foundDst.id;
+      
+      var currentApps = foundDst.applicationIds || [];
+      if (currentApps.length > 0 && !currentApps.includes(dstAppId)) { 
+        var upd = Object.assign({}, foundDst);
+        ['id', 'created', 'modified', 'accountId'].forEach(function(k) { delete upd[k]; });
+        upd.applicationIds = currentApps.concat([dstAppId]);
+        
+        var putUrl = baseUrl('dst') + '/v1/webhooks/' + foundDst.id;
+        try {
+          await apiFetch(putUrl, { method: 'PUT', headers: bearerHeaders('dst'), body: JSON.stringify(upd) });
+          log('  → Updated existing webhook "' + whTitle + '" to include destination app', 'info');
+          foundDst.applicationIds.push(dstAppId); 
+        } catch (err) {
+          console.error('--- WEBHOOK PUT FAILED ---', '\nURL:', putUrl, '\nPayload:', upd, '\nError:', err.message);
+          log('  ⚠ Failed to update webhook "' + whTitle + '": ' + err.message, 'error');
+        }
+      }
+    } else {
+      // SCENARIO B: Create new Webhook and map the new ID
+      var b = Object.assign({}, srcDef);
+      
+      // Strip authenticationId to prevent cross-deployment crashes
+      ['id', 'created', 'modified', 'accountId', 'authenticationId'].forEach(function(k) { delete b[k]; });
+      b.applicationIds = [dstAppId];
+
+      var postUrl = baseUrl('dst') + '/v1/webhooks';
+      try {
+        var newWh = await apiFetch(postUrl, { method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(b) });
+        log('  → Created new webhook "' + whTitle + '" in destination', 'info');
+        existingDst.push(newWh);
+        webhookMap[oldId] = newWh.id; // Map the newly generated ID!
+      } catch (err) {
+        console.error('--- WEBHOOK POST FAILED ---', '\nURL:', postUrl, '\nPayload:', b, '\nError:', err.message);
+        log('  ⚠ Failed to create webhook "' + whTitle + '": ' + err.message, 'error');
+      }
+    }
+  }
+  
+  return webhookMap;
+}
+
 
 // ════════════════════════════════════════════════
 //  COPY COUPONS (from original)
