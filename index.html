@@ -1654,6 +1654,13 @@ async function copyCampaign(c, dstAppId) {
 
   //body.name = body.name + " copy 02"
 
+
+  // 1. Sync Application/Deployment level dependencies
+  try { 
+    await syncCampaignAttributes(c, srcRuleset, dstAppId); 
+  } catch(e) { log('  ⚠ Attribute sync issue: ' + e.message, 'warn'); }
+
+  // 2. Copy campaign shell
   var newCampaign = await apiFetch(baseUrl('dst') + '/v1/applications/' + dstAppId + '/campaigns', {
     method: 'POST', headers: bearerHeaders('dst'), body: JSON.stringify(body)
   });
@@ -1661,11 +1668,7 @@ async function copyCampaign(c, dstAppId) {
 
   var newRulesetId = null;
 
-  // 1. Sync Application/Deployment level dependencies
-  try { 
-    await syncCampaignAttributes(c, srcRuleset, dstAppId); 
-  } catch(e) { log('  ⚠ Attribute sync issue: ' + e.message, 'warn'); }
-
+  // 3. Create webhooks and custom effects needed in rules
   try { 
     await syncCampaignCustomEffects(srcRuleset, dstAppId); 
   } catch(e) { log('  ⚠ Custom Effect sync issue: ' + e.message, 'warn'); }
@@ -1675,13 +1678,13 @@ async function copyCampaign(c, dstAppId) {
     webhookMap = await syncCampaignWebhooks(srcRuleset, dstAppId); 
   } catch(e) { log('  ⚠ Webhook sync issue: ' + e.message, 'warn'); }
 
-  // 2. Sync Campaign level dependencies
+  // 4. Sync Campaign level dependencies
   var achievementMap = {};
   try {
     achievementMap = await syncCampaignAchievements(srcAppId, c.id, dstAppId, newCampaign.id);
   } catch(e) { log('  ⚠ Achievement sync issue: ' + e.message, 'warn'); }
 
-  // 3. Process and save the Ruleset
+  // 5. Process and save the Ruleset
   if (srcRuleset) {
     var rb = Object.assign({}, srcRuleset);
     ['id', 'campaignId', 'created', 'userId'].forEach(function(k) { delete rb[k]; });
