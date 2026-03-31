@@ -1633,7 +1633,7 @@ async function copyCampaign(c, dstAppId) {
   } catch(e) { log('  ⚠ Could not fetch collections: ' + e.message, 'warn'); }
 
   var allowed = ['name','state','tags','limits','features','description','startTime','endTime',
-    'attributes','reevaluateOnReturn','couponSettings','referralSettings','campaignGroups',
+    'attributes','reevaluateOnReturn','couponSettings','referralSettings',
     'type','linkedStoreIds','linkedStoreIntegrationIds','targetedAudienceIds','contextId'];
   var body = {};
   allowed.forEach(function(k) { if (srcCampaign[k] !== undefined) body[k] = srcCampaign[k]; });
